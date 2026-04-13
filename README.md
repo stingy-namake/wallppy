@@ -10,6 +10,8 @@
 
 > Modern, minimal wallpaper browser with infinite scrolling and one‑double‑click downloads.
 
+![This is Wallppy!](.images/image.png)
+![Search results](.images/image-1.png)
 
 wallppy is a desktop application that turns [Wallhaven](https://wallhaven.cc/) (kudos to them) into a sleek, keyboard‑friendly wallpaper explorer. Search any keyword, scroll endlessly through thumbnails, and double‑click any image to save it to your local folder. Already downloaded wallpapers are marked with a green ✓.
 
