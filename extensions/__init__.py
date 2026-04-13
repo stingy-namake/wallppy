@@ -1,0 +1,1 @@
+from .wallhaven import WallhavenExtension

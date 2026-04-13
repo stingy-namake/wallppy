@@ -4,4 +4,5 @@ For: Wallppy
 - Add zerochan (and other booru-models) as extensions
 - Build binary
 - Github [done]
-- Break monolithic structure
+- Switch from monolithic structure to modular 
+- Add credits for the current extension somewhere
