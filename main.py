@@ -4,8 +4,8 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 
 from core.settings import Settings
-from extensions.wallhaven import WallhavenExtension
 from ui.main_window import MainWindow
+import extensions  # registers extensions
 
 
 def main():
@@ -13,9 +13,7 @@ def main():
     app.setWindowIcon(QIcon.fromTheme("wallpaper"))
     
     settings = Settings()
-    extension = WallhavenExtension()  # Could be selected via config later
-    
-    window = MainWindow(extension, settings)
+    window = MainWindow(settings)
     window.show()
     
     sys.exit(app.exec_())

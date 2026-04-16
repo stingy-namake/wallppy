@@ -1,8 +1,10 @@
 For: Wallppy
 - Add home button [done]
-- Add expand preview
+- Add expand preview [done]
 - Add zerochan (and other booru-models) as extensions
 - Build binary
 - Github [done]
-- Switch from monolithic structure to modular 
+- Switch from monolithic structure to modular [done]
 - Add credits for the current extension somewhere
+- Add downloaded source
+- Set wallpaper in-app

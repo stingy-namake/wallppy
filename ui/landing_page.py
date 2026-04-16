@@ -1,14 +1,16 @@
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QLabel, QCheckBox, QFileDialog
+    QLabel, QFileDialog, QComboBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from core.settings import Settings
+from core.extension import get_extension_names
 
 
 class LandingPage(QWidget):
     search_requested = pyqtSignal(str)
+    extension_changed = pyqtSignal(str)
     
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
@@ -20,9 +22,9 @@ class LandingPage(QWidget):
         layout.setAlignment(Qt.AlignCenter)
         layout.setSpacing(20)
         
-        search_container = QWidget()
-        search_container.setFixedWidth(550)
-        container_layout = QVBoxLayout(search_container)
+        container = QWidget()
+        container.setFixedWidth(550)
+        container_layout = QVBoxLayout(container)
         container_layout.setSpacing(15)
         
         title = QLabel("wallppy")
@@ -30,6 +32,21 @@ class LandingPage(QWidget):
         title.setStyleSheet("font-size: 36px; font-weight: bold; color: #1E6FF0;")
         container_layout.addWidget(title)
         
+        # Source selector (moved here)
+        src_layout = QHBoxLayout()
+        src_layout.setSpacing(10)
+        src_label = QLabel("Source:")
+        src_label.setStyleSheet("color: #aaa; font-size: 13px;")
+        self.ext_combo = QComboBox()
+        self.ext_combo.addItems(get_extension_names())
+        self.ext_combo.setCurrentText(self.settings.extension_name)
+        self.ext_combo.currentTextChanged.connect(self.on_extension_changed)
+        src_layout.addWidget(src_label)
+        src_layout.addWidget(self.ext_combo)
+        src_layout.addStretch()
+        container_layout.addLayout(src_layout)
+        
+        # Search input
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search wallpapers...")
         self.search_edit.setMinimumHeight(50)
@@ -49,60 +66,12 @@ class LandingPage(QWidget):
         self.search_edit.returnPressed.connect(self.emit_search)
         container_layout.addWidget(self.search_edit)
         
-        hint1 = QLabel("Press Enter to search")
-        hint1.setAlignment(Qt.AlignCenter)
-        hint1.setStyleSheet("color: #777; font-size: 12px;")
-        container_layout.addWidget(hint1)
+        hint = QLabel("Press Enter to search")
+        hint.setAlignment(Qt.AlignCenter)
+        hint.setStyleSheet("color: #777; font-size: 12px;")
+        container_layout.addWidget(hint)
         
-        # Categories
-        filter_label = QLabel("Categories")
-        filter_label.setStyleSheet("color: #aaa; font-size: 13px; font-weight: bold; margin-top: 5px;")
-        container_layout.addWidget(filter_label)
-        
-        cat_layout = QHBoxLayout()
-        cat_layout.setSpacing(20)
-        cat_layout.setAlignment(Qt.AlignCenter)
-        
-        self.cat_general = QCheckBox("General")
-        self.cat_anime = QCheckBox("Anime")
-        self.cat_people = QCheckBox("People")
-        
-        self.cat_general.setChecked(self.settings.categories["general"])
-        self.cat_anime.setChecked(self.settings.categories["anime"])
-        self.cat_people.setChecked(self.settings.categories["people"])
-        
-        self.cat_general.stateChanged.connect(self.save_categories)
-        self.cat_anime.stateChanged.connect(self.save_categories)
-        self.cat_people.stateChanged.connect(self.save_categories)
-        
-        cat_layout.addWidget(self.cat_general)
-        cat_layout.addWidget(self.cat_anime)
-        cat_layout.addWidget(self.cat_people)
-        container_layout.addLayout(cat_layout)
-        
-        # Purity
-        purity_label = QLabel("Content")
-        purity_label.setStyleSheet("color: #aaa; font-size: 13px; font-weight: bold; margin-top: 5px;")
-        container_layout.addWidget(purity_label)
-        
-        purity_layout = QHBoxLayout()
-        purity_layout.setSpacing(20)
-        purity_layout.setAlignment(Qt.AlignCenter)
-        
-        self.purity_sfw = QCheckBox("SFW")
-        self.purity_sketchy = QCheckBox("Sketchy")
-        
-        self.purity_sfw.setChecked(self.settings.purity["sfw"])
-        self.purity_sketchy.setChecked(self.settings.purity["sketchy"])
-        
-        self.purity_sfw.stateChanged.connect(self.save_purity)
-        self.purity_sketchy.stateChanged.connect(self.save_purity)
-        
-        purity_layout.addWidget(self.purity_sfw)
-        purity_layout.addWidget(self.purity_sketchy)
-        container_layout.addLayout(purity_layout)
-        
-        # Directory
+        # Directory chooser
         dir_label = QLabel("Save to")
         dir_label.setStyleSheet("color: #aaa; font-size: 13px; font-weight: bold; margin-top: 10px;")
         container_layout.addWidget(dir_label)
@@ -122,39 +91,16 @@ class LandingPage(QWidget):
         
         container_layout.addLayout(dir_layout)
         
-        layout.addWidget(search_container)
+        layout.addWidget(container)
     
     def emit_search(self):
         query = self.search_edit.text().strip()
         if query:
             self.search_requested.emit(query)
     
-    def get_category_string(self):
-        cat = ""
-        cat += "1" if self.cat_general.isChecked() else "0"
-        cat += "1" if self.cat_anime.isChecked() else "0"
-        cat += "1" if self.cat_people.isChecked() else "0"
-        return cat
-    
-    def get_purity_string(self):
-        purity = ""
-        purity += "1" if self.purity_sfw.isChecked() else "0"
-        purity += "1" if self.purity_sketchy.isChecked() else "0"
-        purity += "0"
-        return purity
-    
-    def save_categories(self):
-        self.settings.set_categories(
-            self.cat_general.isChecked(),
-            self.cat_anime.isChecked(),
-            self.cat_people.isChecked()
-        )
-    
-    def save_purity(self):
-        self.settings.set_purity(
-            self.purity_sfw.isChecked(),
-            self.purity_sketchy.isChecked()
-        )
+    def on_extension_changed(self, name: str):
+        self.settings.set_extension(name)
+        self.extension_changed.emit(name)
     
     def choose_directory(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Download Folder", self.settings.download_folder)

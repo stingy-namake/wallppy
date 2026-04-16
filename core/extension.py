@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
-from PyQt5.QtCore import QObject
+from typing import List, Dict, Any, Optional, Type
 
 
 class WallpaperExtension(ABC):
@@ -11,40 +10,75 @@ class WallpaperExtension(ABC):
     
     @abstractmethod
     def search(self, query: str, page: int = 1, **kwargs) -> List[Dict[str, Any]]:
-        """
-        Search for wallpapers.
-        
-        Returns:
-            List of wallpaper data dicts.
-        """
         pass
     
     @abstractmethod
     def get_total_pages(self, query: str, **kwargs) -> int:
-        """Return total number of pages for a query."""
         pass
     
     @abstractmethod
     def get_thumbnail_url(self, wallpaper_data: Dict[str, Any]) -> str:
-        """Extract thumbnail URL from wallpaper data."""
         pass
     
     @abstractmethod
     def get_download_url(self, wallpaper_data: Dict[str, Any]) -> str:
-        """Extract full image URL from wallpaper data."""
         pass
     
     @abstractmethod
     def get_wallpaper_id(self, wallpaper_data: Dict[str, Any]) -> str:
-        """Return unique identifier for the wallpaper."""
         pass
     
     @abstractmethod
     def get_file_extension(self, wallpaper_data: Dict[str, Any]) -> str:
-        """Return file extension (e.g., 'jpg', 'png')."""
         pass
     
     @abstractmethod
     def get_resolution(self, wallpaper_data: Dict[str, Any]) -> str:
-        """Return resolution string (e.g., '1920x1080')."""
         pass
+    
+    def get_filters(self) -> Dict[str, Any]:
+        """
+        Return a dictionary describing available filters for this extension.
+        The UI will build filter widgets based on this description.
+        
+        Example return format:
+        {
+            "categories": {
+                "type": "checkboxes",
+                "label": "Categories",
+                "options": [
+                    {"id": "general", "label": "General", "default": True},
+                    {"id": "anime", "label": "Anime", "default": True},
+                    {"id": "people", "label": "People", "default": True}
+                ]
+            },
+            "purity": {
+                "type": "checkboxes",
+                "label": "Content",
+                "options": [
+                    {"id": "sfw", "label": "SFW", "default": True},
+                    {"id": "sketchy", "label": "Sketchy", "default": False},
+                    {"id": "nsfw", "label": "NSFW", "default": False, "requires_auth": True}
+                ]
+            }
+        }
+        
+        Returns empty dict if no filters are available.
+        """
+        return {}
+
+
+# Registry
+_EXTENSION_REGISTRY: Dict[str, Type[WallpaperExtension]] = {}
+
+def register_extension(name: str, cls: Type[WallpaperExtension]):
+    _EXTENSION_REGISTRY[name] = cls
+
+def get_extension_names() -> List[str]:
+    return list(_EXTENSION_REGISTRY.keys())
+
+def create_extension(name: str, **kwargs) -> Optional[WallpaperExtension]:
+    cls = _EXTENSION_REGISTRY.get(name)
+    if cls:
+        return cls(**kwargs)
+    return None

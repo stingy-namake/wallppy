@@ -7,6 +7,7 @@ from typing import Dict, Any
 DEFAULT_DOWNLOAD_FOLDER = "./wallpapers"
 DEFAULT_CATEGORIES = {"general": True, "anime": True, "people": True}
 DEFAULT_PURITY = {"sfw": True, "sketchy": False}
+DEFAULT_EXTENSION = "Wallhaven"
 
 
 class Settings:
@@ -20,6 +21,7 @@ class Settings:
         self.download_folder = DEFAULT_DOWNLOAD_FOLDER
         self.categories = DEFAULT_CATEGORIES.copy()
         self.purity = DEFAULT_PURITY.copy()
+        self.extension_name = DEFAULT_EXTENSION
         self.load()
         os.makedirs(self.download_folder, exist_ok=True)
     
@@ -32,6 +34,7 @@ class Settings:
                     self.download_folder = data.get("download_folder", DEFAULT_DOWNLOAD_FOLDER)
                     self.categories = data.get("categories", DEFAULT_CATEGORIES)
                     self.purity = data.get("purity", DEFAULT_PURITY)
+                    self.extension_name = data.get("extension", DEFAULT_EXTENSION)
             except Exception:
                 pass
     
@@ -40,7 +43,8 @@ class Settings:
         data = {
             "download_folder": self.download_folder,
             "categories": self.categories,
-            "purity": self.purity
+            "purity": self.purity,
+            "extension": self.extension_name
         }
         try:
             with open(self.config_path, 'w') as f:
@@ -59,4 +63,8 @@ class Settings:
     
     def set_purity(self, sfw: bool, sketchy: bool):
         self.purity = {"sfw": sfw, "sketchy": sketchy}
+        self.save()
+    
+    def set_extension(self, name: str):
+        self.extension_name = name
         self.save()

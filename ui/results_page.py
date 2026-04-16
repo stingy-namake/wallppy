@@ -1,15 +1,16 @@
 import random
-from datetime import datetime
+import requests
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QLabel, QScrollArea, QGridLayout, QFrame, QStackedWidget,
-    QProgressBar, QMessageBox
+    QProgressBar, QMessageBox, QCheckBox, QComboBox, QSizePolicy,
+    QToolButton, QShortcut
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread
+from PyQt5.QtGui import QIcon, QPixmap, QKeySequence
 from core.extension import WallpaperExtension
 from core.settings import Settings
-from core.workers import SearchWorker, DownloadWorker
+from core.workers import SearchWorker, DownloadWorker, ThumbnailLoader
 from .wallpaper_widget import WallpaperWidget
 
 
@@ -28,12 +29,214 @@ NO_RESULTS_MESSAGES = [
 ]
 
 
+class FilterPanel(QFrame):
+    """Collapsible panel that contains filter widgets."""
+    filters_changed = pyqtSignal()
+
+    def __init__(self, extension: WallpaperExtension, parent=None):
+        super().__init__(parent)
+        self.extension = extension
+        self.widgets = {}
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setStyleSheet("""
+            FilterPanel {
+                background-color: #2d2d2d;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(16)
+
+        filters = self.extension.get_filters()
+        for filter_id, filter_def in filters.items():
+            filter_type = filter_def.get("type")
+            label = filter_def.get("label", filter_id)
+            options = filter_def.get("options", [])
+
+            cat_label = QLabel(label)
+            cat_label.setStyleSheet("color: #aaa; font-size: 13px; font-weight: bold;")
+            main_layout.addWidget(cat_label)
+
+            if filter_type == "checkboxes":
+                cb_layout = QHBoxLayout()
+                cb_layout.setSpacing(20)
+                for opt in options:
+                    cb = QCheckBox(opt["label"])
+                    cb.setChecked(opt.get("default", False))
+                    cb.stateChanged.connect(self.filters_changed.emit)
+                    cb.setStyleSheet("color: white;")
+                    cb_layout.addWidget(cb)
+                    key = f"{filter_id}.{opt['id']}"
+                    self.widgets[key] = cb
+                cb_layout.addStretch()
+                main_layout.addLayout(cb_layout)
+
+            elif filter_type == "dropdown":
+                combo = QComboBox()
+                for opt in options:
+                    combo.addItem(opt["label"], opt["id"])
+                    if opt.get("default", False):
+                        combo.setCurrentIndex(combo.count() - 1)
+                combo.currentIndexChanged.connect(self.filters_changed.emit)
+                combo.setStyleSheet("""
+                    QComboBox {
+                        background-color: #3d3d3d;
+                        border: 1px solid #4d4d4d;
+                        border-radius: 4px;
+                        padding: 6px;
+                        color: white;
+                    }
+                    QComboBox::drop-down {
+                        border: none;
+                    }
+                """)
+                main_layout.addWidget(combo)
+                self.widgets[filter_id] = combo
+
+        main_layout.addStretch()
+        self.setLayout(main_layout)
+
+    def get_filter_values(self) -> dict:
+        filters = self.extension.get_filters()
+        values = {}
+
+        for filter_id, filter_def in filters.items():
+            filter_type = filter_def.get("type")
+
+            if filter_type == "checkboxes":
+                if filter_id == "categories":
+                    cat = ""
+                    for opt in filter_def["options"]:
+                        cb = self.widgets.get(f"{filter_id}.{opt['id']}")
+                        cat += "1" if (cb and cb.isChecked()) else "0"
+                    values[filter_id] = cat
+                elif filter_id == "purity":
+                    pur = ""
+                    for opt in filter_def["options"]:
+                        cb = self.widgets.get(f"{filter_id}.{opt['id']}")
+                        pur += "1" if (cb and cb.isChecked()) else "0"
+                    values[filter_id] = pur
+                else:
+                    checked = []
+                    for opt in filter_def["options"]:
+                        cb = self.widgets.get(f"{filter_id}.{opt['id']}")
+                        if cb and cb.isChecked():
+                            checked.append(opt["id"])
+                    values[filter_id] = checked
+            elif filter_type == "dropdown":
+                combo = self.widgets.get(filter_id)
+                if combo:
+                    values[filter_id] = combo.currentData()
+
+        return values
+
+
+class FullImageLoader(QThread):
+    """Loads the full resolution image for preview."""
+    loaded = pyqtSignal(QPixmap)
+    error = pyqtSignal(str)
+
+    def __init__(self, url):
+        super().__init__()
+        self.url = url
+
+    def run(self):
+        try:
+            response = requests.get(self.url, timeout=30)
+            if response.status_code == 200:
+                pixmap = QPixmap()
+                pixmap.loadFromData(response.content)
+                self.loaded.emit(pixmap)
+            else:
+                self.error.emit(f"Failed to load image: {response.status_code}")
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class ImageOverlay(QWidget):
+    """Semi-transparent overlay showing the full image."""
+    closed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background-color: rgba(0, 0, 0, 0.9);")
+        self.setVisible(False)
+        self.loader = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignCenter)
+
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setScaledContents(False)
+        layout.addWidget(self.image_label)
+
+        self.loading_label = QLabel("Loading full image...")
+        self.loading_label.setStyleSheet("color: white; font-size: 18px; background: transparent;")
+        self.loading_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.loading_label)
+
+        hint = QLabel("Press ESC to close")
+        hint.setStyleSheet("color: #aaa; font-size: 12px; background: transparent; padding: 10px;")
+        hint.setAlignment(Qt.AlignCenter)
+        layout.addWidget(hint)
+
+        QShortcut(QKeySequence("Escape"), self, self.close_overlay)
+
+    def show_image(self, url):
+        self.image_label.clear()
+        self.loading_label.setVisible(True)
+        self.setVisible(True)
+        self.raise_()
+
+        if self.loader and self.loader.isRunning():
+            self.loader.terminate()
+        self.loader = FullImageLoader(url)
+        self.loader.loaded.connect(self.on_image_loaded)
+        self.loader.error.connect(self.on_load_error)
+        self.loader.start()
+
+    def on_image_loaded(self, pixmap):
+        self.loading_label.setVisible(False)
+        if not pixmap.isNull():
+            available = self.size() - QSize(40, 80)
+            scaled = pixmap.scaled(available, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.image_label.setPixmap(scaled)
+        else:
+            self.image_label.setText("Failed to load image")
+
+    def on_load_error(self, msg):
+        self.loading_label.setVisible(False)
+        self.image_label.setText(f"Error: {msg}")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.image_label.pixmap() and not self.image_label.pixmap().isNull():
+            available = self.size() - QSize(40, 80)
+            scaled = self.image_label.pixmap().scaled(available, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.image_label.setPixmap(scaled)
+
+    def close_overlay(self):
+        self.setVisible(False)
+        self.closed.emit()
+
+    def mousePressEvent(self, event):
+        # Close on any mouse click
+        self.close_overlay()
+
+
 class ResultsPage(QWidget):
     home_requested = pyqtSignal()
     search_requested = pyqtSignal(str)
     download_progress = pyqtSignal(int)
     download_finished = pyqtSignal(bool, str, str, str)
-    
+
     def __init__(self, extension: WallpaperExtension, settings: Settings, parent=None):
         super().__init__(parent)
         self.extension = extension
@@ -45,18 +248,19 @@ class ResultsPage(QWidget):
         self.columns = 3
         self.is_loading = False
         self.workers = []
-        
+
         self.init_ui()
-    
+        self.init_overlay()
+
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
-        
+
         # Top bar
         top_bar = QHBoxLayout()
         top_bar.setSpacing(10)
-        
+
         self.home_btn = QPushButton("⌂")
         self.home_btn.setToolTip("Back to home")
         self.home_btn.setFixedSize(36, 36)
@@ -74,18 +278,47 @@ class ResultsPage(QWidget):
         """)
         self.home_btn.clicked.connect(self.home_requested.emit)
         top_bar.addWidget(self.home_btn)
-        
-        search_layout = QHBoxLayout()
-        search_layout.setSpacing(0)
+
+        # Search bar
+        search_container = QWidget()
+        search_layout = QHBoxLayout(search_container)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        search_layout.setSpacing(8)
+
         search_icon = QLabel()
-        search_icon.setPixmap(QIcon.fromTheme("system-search").pixmap(16,16))
+        search_icon.setPixmap(QIcon.fromTheme("system-search").pixmap(16, 16))
         search_layout.addWidget(search_icon)
+
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search wallpapers...")
         self.search_edit.returnPressed.connect(self.emit_search)
-        search_layout.addWidget(self.search_edit)
-        top_bar.addLayout(search_layout, 3)
-        
+        search_layout.addWidget(self.search_edit, 3)
+
+        # Filter toggle button
+        self.filter_toggle_btn = QToolButton()
+        self.filter_toggle_btn.setText("▼ Filters")
+        self.filter_toggle_btn.setToolTip("Show/hide filters")
+        self.filter_toggle_btn.setCheckable(True)
+        self.filter_toggle_btn.setChecked(False)
+        self.filter_toggle_btn.setStyleSheet("""
+            QToolButton {
+                background-color: #3d3d3d;
+                border-radius: 4px;
+                padding: 6px 12px;
+                min-height: 20px;
+                color: white;
+                border: 1px solid #4d4d4d;
+            }
+            QToolButton:hover {
+                background-color: #4d4d4d;
+            }
+            QToolButton:checked {
+                background-color: #1E6FF0;
+            }
+        """)
+        self.filter_toggle_btn.clicked.connect(self.toggle_filter_panel)
+        search_layout.addWidget(self.filter_toggle_btn)
+
         self.search_btn = QPushButton("Search")
         self.search_btn.clicked.connect(self.emit_search)
         self.search_btn.setStyleSheet("""
@@ -102,30 +335,45 @@ class ResultsPage(QWidget):
                 background-color: #1558C4;
             }
         """)
-        top_bar.addWidget(self.search_btn)
+        search_layout.addWidget(self.search_btn)
+
+        top_bar.addWidget(search_container, 3)
         top_bar.addStretch()
         layout.addLayout(top_bar)
-        
-        # Results container (grid + no-results)
+
+        # Collapsible filter panel
+        self.filter_panel = FilterPanel(self.extension)
+        self.filter_panel.filters_changed.connect(self.on_filters_changed)
+        self.filter_panel.setVisible(False)
+        layout.addWidget(self.filter_panel)
+
+        # Results container
         self.results_container = QStackedWidget()
         layout.addWidget(self.results_container)
-        
-        # Grid
+
+        # Grid with centering
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.NoFrame)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
+
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
         self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.grid_layout.setSpacing(THUMB_PADDING)
         self.grid_layout.setContentsMargins(4, 4, 4, 4)
-        
-        self.scroll_area.setWidget(self.grid_widget)
+
+        # Container to center the grid horizontally
+        grid_container = QWidget()
+        container_layout = QHBoxLayout(grid_container)
+        container_layout.setAlignment(Qt.AlignCenter)
+        container_layout.addWidget(self.grid_widget)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.scroll_area.setWidget(grid_container)
         self.results_container.addWidget(self.scroll_area)
-        
+
         # No results
         self.no_results_widget = QWidget()
         no_results_layout = QVBoxLayout(self.no_results_widget)
@@ -136,22 +384,44 @@ class ResultsPage(QWidget):
         self.no_results_label.setWordWrap(True)
         no_results_layout.addWidget(self.no_results_label)
         self.results_container.addWidget(self.no_results_widget)
-        
+
         # Loading indicator
         self.loading_progress = QProgressBar()
         self.loading_progress.setVisible(False)
         self.loading_progress.setRange(0, 0)
         layout.addWidget(self.loading_progress)
-        
+
         self.scroll_area.viewport().installEventFilter(self)
         self.scroll_area.verticalScrollBar().valueChanged.connect(self.on_scroll)
-    
+
+    def init_overlay(self):
+        self.overlay = ImageOverlay(self)
+        self.overlay.closed.connect(self.on_overlay_closed)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'overlay') and self.overlay.isVisible():
+            self.overlay.resize(self.size())
+            self.overlay.move(0, 0)
+
+    def on_overlay_closed(self):
+        self.activateWindow()
+
+    def toggle_filter_panel(self):
+        is_visible = self.filter_panel.isVisible()
+        self.filter_panel.setVisible(not is_visible)
+        self.filter_toggle_btn.setText("▲ Filters" if not is_visible else "▼ Filters")
+
+    def on_filters_changed(self):
+        if self.current_query:
+            self.start_search(self.current_query)
+
     def eventFilter(self, obj, event):
         if obj == self.scroll_area.viewport() and event.type() == event.Resize:
             if self.update_columns_from_width() and self.wallpapers:
                 self.rebuild_grid()
         return super().eventFilter(obj, event)
-    
+
     def update_columns_from_width(self):
         viewport_width = self.scroll_area.viewport().width()
         thumb_width_total = THUMB_SIZE.width() + 20 + THUMB_PADDING
@@ -161,20 +431,20 @@ class ResultsPage(QWidget):
                 self.columns = new_cols
                 return True
         return False
-    
+
     def on_scroll(self, value):
         if self.is_loading or self.current_page >= self.total_pages:
             return
         scrollbar = self.scroll_area.verticalScrollBar()
         if scrollbar.maximum() - value < 200:
             self.load_next_page()
-    
+
     def emit_search(self):
         query = self.search_edit.text().strip()
         if query:
             self.search_requested.emit(query)
-    
-    def start_search(self, query: str, category: str, purity: str):
+
+    def start_search(self, query: str):
         self.current_query = query
         self.search_edit.setText(query)
         self.current_page = 1
@@ -183,47 +453,44 @@ class ResultsPage(QWidget):
         self.is_loading = True
         self.loading_progress.setVisible(True)
         self.results_container.setCurrentIndex(0)
-        
+
+        filter_values = self.filter_panel.get_filter_values()
+
         self.worker = SearchWorker(
             self.extension,
             query,
             self.current_page,
-            category=category,
-            purity=purity
+            **filter_values
         )
         self.worker.finished.connect(self.on_search_finished)
         self.worker.error.connect(self.on_search_error)
         self.worker.start()
         self.workers.append(self.worker)
-    
+
     def load_next_page(self):
         if self.is_loading or self.current_page >= self.total_pages:
             return
-        
+
         self.is_loading = True
         self.loading_progress.setVisible(True)
-        
-        # Get category/purity from main window via parent
-        main_win = self.window()
-        category = main_win.landing_page.get_category_string()
-        purity = main_win.landing_page.get_purity_string()
-        
+
+        filter_values = self.filter_panel.get_filter_values()
+
         self.worker = SearchWorker(
             self.extension,
             self.current_query,
             self.current_page + 1,
-            category=category,
-            purity=purity
+            **filter_values
         )
         self.worker.finished.connect(self.on_search_finished)
         self.worker.error.connect(self.on_search_error)
         self.worker.start()
         self.workers.append(self.worker)
-    
+
     def on_search_finished(self, wallpapers, page, total_pages):
         self.is_loading = False
         self.loading_progress.setVisible(False)
-        
+
         if page == 1:
             self.wallpapers = wallpapers
             self.total_pages = total_pages
@@ -238,38 +505,39 @@ class ResultsPage(QWidget):
             self.current_page = page
             self.total_pages = total_pages
             self.append_to_grid(wallpapers)
-    
+
     def on_search_error(self, error_msg):
         self.is_loading = False
         self.loading_progress.setVisible(False)
         QMessageBox.critical(self, "Search Error", error_msg)
-    
+
     def show_no_results(self):
         message = random.choice(NO_RESULTS_MESSAGES)
         self.no_results_label.setText(message)
         self.results_container.setCurrentIndex(1)
-    
+
     def rebuild_grid(self):
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        
+
         if not self.wallpapers:
             return
-        
+
         self.update_columns_from_width()
-        
+
         for i, wp in enumerate(self.wallpapers):
             row = i // self.columns
             col = i % self.columns
             widget = WallpaperWidget(self.extension, wp, self.settings.download_folder)
             widget.download_triggered.connect(self.download_wallpaper)
+            widget.expand_triggered.connect(self.expand_wallpaper)
             self.grid_layout.addWidget(widget, row, col)
-        
+
         row_count = (len(self.wallpapers) - 1) // self.columns + 1
         self.grid_layout.setRowStretch(row_count, 1)
-    
+
     def append_to_grid(self, new_wallpapers):
         start_index = len(self.wallpapers) - len(new_wallpapers)
         for i, wp in enumerate(new_wallpapers):
@@ -278,11 +546,12 @@ class ResultsPage(QWidget):
             col = global_index % self.columns
             widget = WallpaperWidget(self.extension, wp, self.settings.download_folder)
             widget.download_triggered.connect(self.download_wallpaper)
+            widget.expand_triggered.connect(self.expand_wallpaper)
             self.grid_layout.addWidget(widget, row, col)
-        
+
         row_count = (len(self.wallpapers) - 1) // self.columns + 1
         self.grid_layout.setRowStretch(row_count, 1)
-    
+
     def download_wallpaper(self, wallpaper_data):
         self.download_progress.emit(0)
         self.dl_worker = DownloadWorker(self.extension, wallpaper_data, self.settings.download_folder)
@@ -290,22 +559,35 @@ class ResultsPage(QWidget):
         self.dl_worker.progress.connect(self.download_progress.emit)
         self.dl_worker.start()
         self.workers.append(self.dl_worker)
-    
+
     def on_download_finished(self, success, filepath, filename, wall_id):
         self.download_finished.emit(success, filepath, filename, wall_id)
         if success:
-            # Update checkmark on matching widget
             for i in range(self.grid_layout.count()):
                 widget = self.grid_layout.itemAt(i).widget()
                 if isinstance(widget, WallpaperWidget):
                     if self.extension.get_wallpaper_id(widget.data) == wall_id:
                         widget.update_downloaded_status()
                         break
-    
-    def update_download_folder(self):
-        """Update all widgets with new download folder."""
-        for i in range(self.grid_layout.count()):
-            widget = self.grid_layout.itemAt(i).widget()
-            if isinstance(widget, WallpaperWidget):
-                widget.download_folder = self.settings.download_folder
-                widget.update_downloaded_status()
+
+    def expand_wallpaper(self, wallpaper_data):
+        """Show full image in overlay."""
+        image_url = self.extension.get_download_url(wallpaper_data)
+        if image_url:
+            self.overlay.resize(self.size())
+            self.overlay.move(0, 0)
+            self.overlay.show_image(image_url)
+        else:
+            QMessageBox.information(self, "Preview", "Original image URL not available.")
+
+    def update_extension(self, new_extension: WallpaperExtension):
+        self.extension = new_extension
+        layout = self.layout()
+        old_panel = self.filter_panel
+        layout.removeWidget(old_panel)
+        old_panel.deleteLater()
+
+        self.filter_panel = FilterPanel(self.extension)
+        self.filter_panel.filters_changed.connect(self.on_filters_changed)
+        self.filter_panel.setVisible(self.filter_toggle_btn.isChecked())
+        layout.insertWidget(1, self.filter_panel)

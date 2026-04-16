@@ -6,17 +6,17 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QColor, QIcon
 
-from core.extension import WallpaperExtension
+from core.extension import create_extension
 from core.settings import Settings
 from .landing_page import LandingPage
 from .results_page import ResultsPage
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, extension: WallpaperExtension, settings: Settings):
+    def __init__(self, settings: Settings):
         super().__init__()
-        self.extension = extension
         self.settings = settings
+        self.extension = create_extension(settings.extension_name)
         self.setWindowTitle("wallppy")
         self.setMinimumSize(682, 500)
         self.resize(1100, 700)
@@ -38,6 +38,7 @@ class MainWindow(QMainWindow):
         # Landing page
         self.landing_page = LandingPage(self.settings)
         self.landing_page.search_requested.connect(self.on_search_requested)
+        self.landing_page.extension_changed.connect(self.on_extension_changed)
         self.stacked.addWidget(self.landing_page)
         
         # Results page
@@ -57,6 +58,14 @@ class MainWindow(QMainWindow):
             self.landing_page.emit_search()
         else:
             super().keyPressEvent(event)
+    
+    def on_extension_changed(self, name: str):
+        """Switch to a different extension."""
+        new_ext = create_extension(name)
+        if new_ext:
+            self.extension = new_ext
+            # Update results page with new extension
+            self.results_page.update_extension(new_ext)
     
     def setup_status_bar(self):
         self.status_bar = self.statusBar()
@@ -108,12 +117,22 @@ class MainWindow(QMainWindow):
             QMainWindow {
                 background-color: #1e1e1e;
             }
-            QLineEdit, QPushButton, QScrollArea, QCheckBox {
+            QLineEdit, QPushButton, QScrollArea, QCheckBox, QComboBox {
                 background-color: #2d2d2d;
                 border: 1px solid #3d3d3d;
                 border-radius: 4px;
                 padding: 6px;
                 color: white;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #aaa;
+                margin-right: 5px;
             }
             QCheckBox {
                 border: none;
@@ -161,9 +180,7 @@ class MainWindow(QMainWindow):
         """)
     
     def on_search_requested(self, query: str):
-        category = self.landing_page.get_category_string()
-        purity = self.landing_page.get_purity_string()
-        self.results_page.start_search(query, category, purity)
+        self.results_page.start_search(query)
         self.stacked.setCurrentIndex(1)
     
     def go_home(self):

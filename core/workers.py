@@ -1,4 +1,3 @@
-import sys
 import os
 import requests
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -47,6 +46,8 @@ class DownloadWorker(QThread):
         ext = self.extension.get_file_extension(self.data)
         filename = f"wallppy-{wall_id}.{ext}"
         filepath = os.path.join(self.download_folder, filename)
+        
+        os.makedirs(self.download_folder, exist_ok=True)
         
         if os.path.exists(filepath):
             self.finished.emit(True, filepath, filename, wall_id)
