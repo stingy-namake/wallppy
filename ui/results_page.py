@@ -56,7 +56,7 @@ class FilterPanel(QFrame):
         main_layout.setSpacing(12)
         main_layout.setAlignment(Qt.AlignTop)
 
-        filters = self.extension.get_filters()
+        filters = self.extension.get_filters() if self.extension else {}
         
         for filter_id, filter_def in filters.items():
             filter_type = filter_def.get("type")
@@ -365,7 +365,7 @@ class ResultsPage(QWidget):
         self.filter_toggle_btn.setToolTip("Show/hide filters")
         self.filter_toggle_btn.setCheckable(True)
         self.filter_toggle_btn.setChecked(False)
-        self.filter_toggle_btn.setFixedHeight(32)
+        self.filter_toggle_btn.setFixedSize(100, 32)  # Same fixed size as Search
         self.filter_toggle_btn.setStyleSheet("""
             QToolButton {
                 background-color: #3d3d3d;
@@ -387,6 +387,8 @@ class ResultsPage(QWidget):
         search_layout.addWidget(self.filter_toggle_btn)
 
         self.search_btn = QPushButton("Search")
+        self.search_btn.setFixedSize(100, 32)  # Same fixed size as Filters
+        self.search_btn.clicked.connect(self.emit_search).search_btn = QPushButton("Search")
         self.search_btn.setFixedHeight(32)
         self.search_btn.clicked.connect(self.emit_search)
         self.search_btn.setStyleSheet("""

@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QColor, QIcon
 
-from core.extension import create_extension
+from core.extension import create_extension, get_extension_names
 from core.settings import Settings
 from .landing_page import LandingPage
 from .results_page import ResultsPage
@@ -17,6 +17,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.settings = settings
         self.extension = create_extension(settings.extension_name)
+        if self.extension is None:
+        # Fallback if saved extension no longer exists (e.g. Danbooru was removed)
+            fallback_name = get_extension_names()[0] if get_extension_names() else None
+            if fallback_name:
+                self.extension = create_extension(fallback_name)
+                self.settings.set_extension(fallback_name)
         self.setWindowTitle("wallppy")
         self.setMinimumSize(682, 500)
         self.resize(1100, 700)
@@ -202,7 +208,7 @@ class MainWindow(QMainWindow):
         self.download_progress.setVisible(False)
         if success:
             timestamp = datetime.now().strftime("%H:%M:%S")
-            msg = f"✅ Downloaded: {filename}  →  {self.settings.download_folder}  ({timestamp})"
+            msg = f"Downloaded: {filename}  →  {self.settings.download_folder}  ({timestamp})"
             self.status_bar.showMessage(msg)
         else:
-            self.status_bar.showMessage(f"❌ Download failed: {filename}")
+            self.status_bar.showMessage(f"Download failed: {filename}")

@@ -1,7 +1,7 @@
 import os
 from PyQt5.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy,
-    QToolButton, QMessageBox
+    QToolButton, QMessageBox, QWidget
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QPixmap, QIcon
@@ -30,9 +30,11 @@ class WallpaperWidget(QFrame):
             WallpaperWidget {
                 background-color: #2d2d2d;
                 border-radius: 8px;
+                border: 1px solid #333;
             }
             WallpaperWidget:hover {
-                background-color: #3d3d3d;
+                background-color: #323232;
+                border-color: #3d3d3d;
             }
         """)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -52,6 +54,7 @@ class WallpaperWidget(QFrame):
             QLabel {
                 background-color: #1e1e1e;
                 border-radius: 6px;
+                border: 1px solid #262626;
             }
             QLabel:hover {
                 border: 2px solid #1E6FF0;
@@ -69,22 +72,27 @@ class WallpaperWidget(QFrame):
         bottom_layout.setContentsMargins(0, 0, 0, 0)
         bottom_layout.setSpacing(16)
 
-        # Checkmark (leftmost)
-        self.checkmark_label = QLabel()
-        self.checkmark_label.setAlignment(Qt.AlignCenter)
-        self.checkmark_label.setStyleSheet("""
-            QLabel {
+        # Checkmark button (leftmost, same style as other buttons)
+        self.checkmark_btn = QToolButton()
+        self.checkmark_btn.setText("🗂")
+        self.checkmark_btn.setToolTip("Downloaded")
+        self.checkmark_btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.checkmark_btn.setStyleSheet("""
+            QToolButton {
                 background-color: rgba(0, 180, 0, 0.85);
-                color: white;
-                font-weight: bold;
-                font-size: 12px;
                 border-radius: 4px;
-                padding: 2px 12px;
+                border: none;
+                color: white;
+                font-size: 12px;
+                padding-top: 7px;
+                padding-bottom: 7px;
+                text-align: center;
+                font-weight: bold;
             }
         """)
-        self.checkmark_label.setText("✓")
-        self.checkmark_label.hide()
-        bottom_layout.addWidget(self.checkmark_label)
+        self.checkmark_btn.setFixedSize(36, 30)
+        self.checkmark_btn.hide()
+        bottom_layout.addWidget(self.checkmark_btn)
 
         # Resolution
         res = self.extension.get_resolution(self.data)
@@ -94,7 +102,7 @@ class WallpaperWidget(QFrame):
 
         bottom_layout.addStretch()
 
-        # Common button style
+        # Common button style for action buttons
         BUTTON_STYLE = """
             QToolButton {
                 background-color: rgba(60, 60, 60, 0.8);
@@ -124,7 +132,7 @@ class WallpaperWidget(QFrame):
 
         # Set as Wallpaper button
         self.wallpaper_btn = QToolButton()
-        self.wallpaper_btn.setText("🖼")
+        self.wallpaper_btn.setText("🖵")
         self.wallpaper_btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.wallpaper_btn.setToolTip("Set as Desktop Background")
         self.wallpaper_btn.setCursor(Qt.PointingHandCursor)
@@ -155,8 +163,9 @@ class WallpaperWidget(QFrame):
         self.wallpaper_btn.setToolTip("Set as Desktop Background" if success else message)
         
         if success and filepath:
-            self.checkmark_label.show()  # Show checkmark since it's now downloaded
-        elif not success:
+            # Don't show checkmark for temp files - only if actually downloaded
+            pass
+        else:
             QMessageBox.warning(self, "Wallpaper Error", f"Failed to set wallpaper:\n{message}")
         
         self._wallpaper_worker = None
@@ -169,26 +178,15 @@ class WallpaperWidget(QFrame):
         super().showEvent(event)
         self.update_downloaded_status()
 
-    def position_checkmark(self):
-        """Position the checkmark overlay at bottom-right of thumbnail."""
-        if self.checkmark_label:
-            label_width = self.checkmark_label.sizeHint().width()
-            label_height = self.checkmark_label.sizeHint().height()
-            margin = 4
-            self.checkmark_label.move(
-                THUMB_SIZE.width() - label_width - margin,
-                THUMB_SIZE.height() - label_height - margin
-            )
-
     def update_downloaded_status(self):
         wall_id = self.extension.get_wallpaper_id(self.data)
         ext = self.extension.get_file_extension(self.data)
         filename = f"wallppy-{wall_id}.{ext}"
         filepath = os.path.join(self.download_folder, filename)
         if os.path.exists(filepath):
-            self.checkmark_label.show()
+            self.checkmark_btn.show()
         else:
-            self.checkmark_label.hide()
+            self.checkmark_btn.hide()
 
     def load_thumbnail(self):
         if self.thumb_url:
@@ -199,7 +197,6 @@ class WallpaperWidget(QFrame):
                     self.thumb_label.setPixmap(scaled)
                 else:
                     self.thumb_label.setText("Invalid image")
-                self.position_checkmark()
                 self.update_downloaded_status()
                 return
             self.loader = ThumbnailLoader(self.thumb_url)
@@ -214,7 +211,6 @@ class WallpaperWidget(QFrame):
             self.thumb_label.setPixmap(scaled)
         else:
             self.thumb_label.setText("Load failed")
-        self.position_checkmark()
         self.update_downloaded_status()
 
     def emit_download(self):
