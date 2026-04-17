@@ -43,6 +43,12 @@ class DownloadWorker(QThread):
             self.finished.emit(False, "", "No image URL", wall_id)
             return
         
+        # If the URL is a local file path (exists on disk), treat as already downloaded
+        if os.path.exists(download_url):
+            filename = os.path.basename(download_url)
+            self.finished.emit(True, download_url, filename, wall_id)
+            return
+        
         ext = self.extension.get_file_extension(self.data)
         filename = f"wallppy-{wall_id}.{ext}"
         filepath = os.path.join(self.download_folder, filename)
@@ -79,6 +85,12 @@ class ThumbnailLoader(QThread):
     
     def run(self):
         try:
+            # Handle local file paths (e.g., from LocalExtension)
+            if os.path.exists(self.url):
+                pixmap = QPixmap(self.url)
+                self.loaded.emit(pixmap)
+                return
+            
             response = requests.get(self.url, timeout=10)
             if response.status_code == 200:
                 pixmap = QPixmap()

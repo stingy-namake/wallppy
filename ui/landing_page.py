@@ -10,6 +10,7 @@ from core.extension import get_extension_names
 
 class LandingPage(QWidget):
     search_requested = pyqtSignal(str)
+    explore_requested = pyqtSignal()  # New signal
     extension_changed = pyqtSignal(str)
     
     def __init__(self, settings: Settings, parent=None):
@@ -32,7 +33,7 @@ class LandingPage(QWidget):
         title.setStyleSheet("font-size: 36px; font-weight: bold; color: #1E6FF0;")
         container_layout.addWidget(title)
         
-        # Source selector (moved here)
+        # Source selector
         src_layout = QHBoxLayout()
         src_layout.setSpacing(10)
         src_label = QLabel("Source:")
@@ -66,10 +67,38 @@ class LandingPage(QWidget):
         self.search_edit.returnPressed.connect(self.emit_search)
         container_layout.addWidget(self.search_edit)
         
+        # Hint and Explore button row
+        hint_layout = QHBoxLayout()
+        hint_layout.setSpacing(10)
+        
         hint = QLabel("Press Enter to search")
-        hint.setAlignment(Qt.AlignCenter)
+        hint.setAlignment(Qt.AlignLeft)
         hint.setStyleSheet("color: #777; font-size: 12px;")
-        container_layout.addWidget(hint)
+        hint_layout.addWidget(hint)
+        
+        hint_layout.addStretch()
+        
+        self.explore_btn = QPushButton("Explore")
+        self.explore_btn.setToolTip("Browse recent uploads")
+        self.explore_btn.setFixedHeight(32)
+        self.explore_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid #3d3d3d;
+                border-radius: 16px;
+                padding: 6px 16px;
+                color: #aaa;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #3d3d3d;
+                color: white;
+            }
+        """)
+        self.explore_btn.clicked.connect(self.emit_explore)
+        hint_layout.addWidget(self.explore_btn)
+        
+        container_layout.addLayout(hint_layout)
         
         # Directory chooser
         dir_label = QLabel("Save to")
@@ -97,6 +126,10 @@ class LandingPage(QWidget):
         query = self.search_edit.text().strip()
         if query:
             self.search_requested.emit(query)
+    
+    def emit_explore(self):
+        """Emit signal for explore action (empty query)."""
+        self.explore_requested.emit()
     
     def on_extension_changed(self, name: str):
         self.settings.set_extension(name)

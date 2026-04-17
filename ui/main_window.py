@@ -38,6 +38,7 @@ class MainWindow(QMainWindow):
         # Landing page
         self.landing_page = LandingPage(self.settings)
         self.landing_page.search_requested.connect(self.on_search_requested)
+        self.landing_page.explore_requested.connect(self.on_explore_requested)
         self.landing_page.extension_changed.connect(self.on_extension_changed)
         self.stacked.addWidget(self.landing_page)
         
@@ -181,6 +182,12 @@ class MainWindow(QMainWindow):
     
     def on_search_requested(self, query: str):
         self.results_page.start_search(query)
+        self.stacked.setCurrentIndex(1)
+
+    def on_explore_requested(self):
+        """Handle explore action: search with empty query."""
+        # Use empty string for query
+        self.results_page.start_search("")
         self.stacked.setCurrentIndex(1)
     
     def go_home(self):

@@ -20,10 +20,7 @@ class DanbooruExtension(WallpaperExtension):
         return {}
     
     def search(self, query: str, page: int = 1, **kwargs) -> List[Dict[str, Any]]:
-        # Danbooru has a 2-tag limit for unauthenticated users.
-        # To avoid exceeding it, we convert spaces to underscores so multi-word
-        # queries become a single tag (e.g., "dragon ball z" -> "dragon_ball_z").
-        tags = []
+        tags = query.strip().split() if query else ["order:rank"]
         if query:
             # Replace spaces with underscores to form a single tag
             safe_query = query.strip().replace(' ', '_')

@@ -1,3 +1,4 @@
+import os
 import random
 import requests
 from PyQt5.QtWidgets import (
@@ -11,6 +12,7 @@ from PyQt5.QtGui import QIcon, QPixmap, QKeySequence
 from core.extension import WallpaperExtension
 from core.settings import Settings
 from core.workers import SearchWorker, DownloadWorker, ThumbnailLoader
+from core.wallpaper_manager import WallpaperSetterWorker
 from .wallpaper_widget import WallpaperWidget
 
 
@@ -147,6 +149,22 @@ class FullImageLoader(QThread):
 
     def run(self):
         try:
+            # Handle local file paths (including file://)
+            if self.url.startswith("file://"):
+                filepath = self.url[7:]  # Remove 'file://' prefix
+            else:
+                filepath = self.url
+
+            # Check if it's a local file that exists
+            if os.path.exists(filepath):
+                pixmap = QPixmap(filepath)
+                if pixmap.isNull():
+                    self.error.emit("Failed to load image from disk")
+                else:
+                    self.loaded.emit(pixmap)
+                return
+
+            # Otherwise treat as network URL
             response = requests.get(self.url, timeout=30)
             if response.status_code == 200:
                 pixmap = QPixmap()
@@ -156,7 +174,6 @@ class FullImageLoader(QThread):
                 self.error.emit(f"Failed to load image: {response.status_code}")
         except Exception as e:
             self.error.emit(str(e))
-
 
 class ImageOverlay(QWidget):
     """Semi-transparent overlay showing the full image."""
@@ -446,16 +463,26 @@ class ResultsPage(QWidget):
 
     def start_search(self, query: str):
         self.current_query = query
-        self.search_edit.setText(query)
+        if query == "":
+            self.search_edit.setText("")
+            self.search_edit.setPlaceholderText("Showing recent uploads...")
+        else:
+            self.search_edit.setText(query)
+            self.search_edit.setPlaceholderText("Search wallpapers...")
+        
         self.current_page = 1
         self.wallpapers = []
         self.total_pages = 1
         self.is_loading = True
         self.loading_progress.setVisible(True)
         self.results_container.setCurrentIndex(0)
-
+        
         filter_values = self.filter_panel.get_filter_values()
-
+        
+        # Pass download folder for Local extension
+        if self.extension.name == "Local":
+            filter_values["download_folder"] = self.settings.download_folder
+        
         self.worker = SearchWorker(
             self.extension,
             query,
@@ -470,12 +497,16 @@ class ResultsPage(QWidget):
     def load_next_page(self):
         if self.is_loading or self.current_page >= self.total_pages:
             return
-
+        
         self.is_loading = True
         self.loading_progress.setVisible(True)
-
+        
         filter_values = self.filter_panel.get_filter_values()
-
+        
+        # Pass download folder for Local extension
+        if self.extension.name == "Local":
+            filter_values["download_folder"] = self.settings.download_folder
+        
         self.worker = SearchWorker(
             self.extension,
             self.current_query,
@@ -500,11 +531,20 @@ class ResultsPage(QWidget):
             else:
                 self.results_container.setCurrentIndex(0)
                 self.rebuild_grid()
+                main_win = self.window()
+                if hasattr(main_win, 'status_bar'):
+                    if self.current_query == "":
+                        main_win.status_bar.showMessage(f"Showing recent uploads (page 1/{total_pages})")
+                    else:
+                        main_win.status_bar.showMessage(f"Found {len(wallpapers)} wallpapers (page 1/{total_pages})")
         else:
             self.wallpapers.extend(wallpapers)
             self.current_page = page
             self.total_pages = total_pages
             self.append_to_grid(wallpapers)
+            main_win = self.window()
+            if hasattr(main_win, 'status_bar'):
+                main_win.status_bar.showMessage(f"Loaded {len(wallpapers)} more wallpapers (page {page}/{total_pages})")
 
     def on_search_error(self, error_msg):
         self.is_loading = False
@@ -533,6 +573,7 @@ class ResultsPage(QWidget):
             widget = WallpaperWidget(self.extension, wp, self.settings.download_folder)
             widget.download_triggered.connect(self.download_wallpaper)
             widget.expand_triggered.connect(self.expand_wallpaper)
+            widget.set_wallpaper_triggered.connect(self.set_as_background)  # <-- New connection
             self.grid_layout.addWidget(widget, row, col)
 
         row_count = (len(self.wallpapers) - 1) // self.columns + 1
@@ -547,6 +588,7 @@ class ResultsPage(QWidget):
             widget = WallpaperWidget(self.extension, wp, self.settings.download_folder)
             widget.download_triggered.connect(self.download_wallpaper)
             widget.expand_triggered.connect(self.expand_wallpaper)
+            widget.set_wallpaper_triggered.connect(self.set_as_background)  # <-- New connection
             self.grid_layout.addWidget(widget, row, col)
 
         row_count = (len(self.wallpapers) - 1) // self.columns + 1
@@ -574,11 +616,36 @@ class ResultsPage(QWidget):
         """Show full image in overlay."""
         image_url = self.extension.get_download_url(wallpaper_data)
         if image_url:
+            # Convert local path to file:// URL if needed
+            if os.path.exists(image_url):
+                image_url = f"file://{os.path.abspath(image_url)}"
             self.overlay.resize(self.size())
             self.overlay.move(0, 0)
             self.overlay.show_image(image_url)
         else:
             QMessageBox.information(self, "Preview", "Original image URL not available.")
+
+    def set_as_background(self, wallpaper_data):
+        """Handle the 'Set as Background' button click."""
+        main_win = self.window()
+        if hasattr(main_win, 'status_bar'):
+            main_win.status_bar.showMessage("Setting wallpaper...")
+        
+        self.wallpaper_worker = WallpaperSetterWorker(
+            wallpaper_data, self.extension, self.settings.download_folder
+        )
+        self.wallpaper_worker.finished.connect(self.on_wallpaper_set)
+        self.wallpaper_worker.start()
+        self.workers.append(self.wallpaper_worker)
+
+    def on_wallpaper_set(self, success, message):
+        """Handle the result of the wallpaper setting operation."""
+        main_win = self.window()
+        if hasattr(main_win, 'status_bar'):
+            if success:
+                main_win.status_bar.showMessage("✅ Wallpaper set successfully!")
+            else:
+                main_win.status_bar.showMessage(f"❌ Failed to set wallpaper: {message}")
 
     def update_extension(self, new_extension: WallpaperExtension):
         self.extension = new_extension

@@ -14,7 +14,8 @@ THUMB_SIZE = QSize(280, 158)
 
 class WallpaperWidget(QFrame):
     download_triggered = pyqtSignal(dict)
-    expand_triggered = pyqtSignal(dict)  # New signal for the expand feature
+    expand_triggered = pyqtSignal(dict)
+    set_wallpaper_triggered = pyqtSignal(dict)
 
     def __init__(self, extension: WallpaperExtension, wallpaper_data: dict, download_folder: str, parent=None):
         super().__init__(parent)
@@ -91,40 +92,67 @@ class WallpaperWidget(QFrame):
 
         bottom_layout.addStretch()
 
-        # Expand button (REPLACES download button)
-        self.expand_btn = QToolButton()
-        self.expand_btn.setText("⤢")  # Symbol for expand
-        self.expand_btn.setToolTip("Expand Preview")
-        self.expand_btn.setCursor(Qt.PointingHandCursor)
-        self.expand_btn.setStyleSheet("""
+        # Common button style
+        BUTTON_STYLE = """
             QToolButton {
                 background-color: rgba(60, 60, 60, 0.8);
                 border-radius: 4px;
-                padding: 4px;
                 border: none;
                 color: white;
                 font-size: 14px;
+                text-align: center;
             }
             QToolButton:hover {
                 background-color: rgba(80, 80, 80, 1);
             }
-        """)
+        """
+
+        # Expand button
+        self.expand_btn = QToolButton()
+        self.expand_btn.setText("⤢")
+        self.expand_btn.setToolTip("Expand Preview")
+        self.expand_btn.setCursor(Qt.PointingHandCursor)
+        self.expand_btn.setStyleSheet(BUTTON_STYLE)
+        self.expand_btn.setFixedSize(36, 30)  # FORCE SAME SIZE
+        self.expand_btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.expand_btn.clicked.connect(lambda: self.expand_triggered.emit(self.data))
         bottom_layout.addWidget(self.expand_btn)
 
-        layout.addLayout(bottom_layout)
+        # Set as Wallpaper button
+        self.wallpaper_btn = QToolButton()
+        self.wallpaper_btn.setText("🖼")
+        self.wallpaper_btn.setToolTip("Set as Desktop Background")
+        self.wallpaper_btn.setCursor(Qt.PointingHandCursor)
+        self.wallpaper_btn.setStyleSheet(BUTTON_STYLE)
+        self.wallpaper_btn.setFixedSize(36, 30)  # FORCE SAME SIZE
+        self.wallpaper_btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.wallpaper_btn.clicked.connect(lambda: self.set_wallpaper_triggered.emit(self.data))
+        bottom_layout.addWidget(self.wallpaper_btn)
+        
 
+        layout.addLayout(bottom_layout)
         self.setLayout(layout)
         self.setFixedSize(THUMB_SIZE.width() + 20, THUMB_SIZE.height() + 54)
 
+
     def mouseDoubleClickEvent(self, event):
-        """Triggers download on double click."""
         if event.button() == Qt.LeftButton:
             self.emit_download()
 
     def showEvent(self, event):
         super().showEvent(event)
         self.update_downloaded_status()
+
+    def position_checkmark(self):
+        """Position the checkmark overlay at bottom-right of thumbnail."""
+        if self.checkmark_label:
+            label_width = self.checkmark_label.sizeHint().width()
+            label_height = self.checkmark_label.sizeHint().height()
+            margin = 4
+            self.checkmark_label.move(
+                THUMB_SIZE.width() - label_width - margin,
+                THUMB_SIZE.height() - label_height - margin
+            )
 
     def update_downloaded_status(self):
         wall_id = self.extension.get_wallpaper_id(self.data)
@@ -138,6 +166,16 @@ class WallpaperWidget(QFrame):
 
     def load_thumbnail(self):
         if self.thumb_url:
+            if os.path.exists(self.thumb_url):
+                pixmap = QPixmap(self.thumb_url)
+                if not pixmap.isNull():
+                    scaled = pixmap.scaled(THUMB_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    self.thumb_label.setPixmap(scaled)
+                else:
+                    self.thumb_label.setText("Invalid image")
+                self.position_checkmark()
+                self.update_downloaded_status()
+                return
             self.loader = ThumbnailLoader(self.thumb_url)
             self.loader.loaded.connect(self.set_thumbnail)
             self.loader.start()
@@ -150,6 +188,7 @@ class WallpaperWidget(QFrame):
             self.thumb_label.setPixmap(scaled)
         else:
             self.thumb_label.setText("Load failed")
+        self.position_checkmark()
         self.update_downloaded_status()
 
     def emit_download(self):

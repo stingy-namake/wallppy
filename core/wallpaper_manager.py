@@ -1,0 +1,117 @@
+import os
+import platform
+import subprocess
+import tempfile
+import re
+import requests
+from PyQt5.QtCore import QThread, pyqtSignal
+
+class WallpaperManager:
+    """Cross-platform manager to set the desktop wallpaper."""
+    
+    @staticmethod
+    def set_wallpaper(image_path):
+        """Set the desktop wallpaper based on the current OS."""
+        system = platform.system()
+        try:
+            if system == "Windows":
+                WallpaperManager._set_windows_wallpaper(image_path)
+            elif system == "Darwin":  # macOS
+                WallpaperManager._set_macos_wallpaper(image_path)
+            elif system == "Linux":
+                WallpaperManager._set_linux_wallpaper(image_path)
+            else:
+                raise OSError(f"Unsupported operating system: {system}")
+            return True, "Wallpaper set successfully!"
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def _set_windows_wallpaper(image_path):
+        import ctypes
+        SPI_SETDESKWALLPAPER = 20
+        SPIF_UPDATEINIFILE = 0x01
+        SPIF_SENDWININICHANGE = 0x02
+        ctypes.windll.user32.SystemParametersInfoW(
+            SPI_SETDESKWALLPAPER, 0, image_path,
+            SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE
+        )
+
+    @staticmethod
+    def _set_macos_wallpaper(image_path):
+        script = f'tell application "Finder" to set desktop picture to POSIX file "{image_path}"'
+        subprocess.run(["osascript", "-e", script], check=True)
+
+    @staticmethod
+    def _set_linux_wallpaper(image_path):
+        # Try COSMIC first
+        cosmic_config = os.path.expanduser("~/.config/cosmic/com.system76.CosmicBackground/v1/all")
+        if os.path.exists(cosmic_config):
+            try:
+                # Escape the path for use in a regex and RON format
+                escaped_path = image_path.replace('\\', '\\\\')
+                # Regex to find and replace the existing 'source: Path("...")' line
+                pattern = r'source: Path\(".*?"\)'
+                replacement = f'source: Path("{escaped_path}")'
+
+                with open(cosmic_config, 'r') as f:
+                    content = f.read()
+                new_content = re.sub(pattern, replacement, content)
+
+                # If no source line was found, add one (basic implementation)
+                if "source:" not in new_content:
+                    new_content += f"\nsource: Path(\"{escaped_path}\")"
+
+                with open(cosmic_config, 'w') as f:
+                    f.write(new_content)
+                return
+            except Exception as e:
+                print(f"Failed to set COSMIC wallpaper: {e}")
+
+        # Fallback to other desktop environments
+        commands = [
+            ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", f"file://{image_path}"],
+            ["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", f"file://{image_path}"],
+            ["plasma-apply-wallpaperimage", image_path],
+            ["xfconf-query", "-c", "xfce4-desktop", "-p", "/backdrop/screen0/monitor0/workspace0/last-image", "-s", image_path],
+            ["feh", "--bg-scale", image_path],
+        ]
+        for cmd in commands:
+            try:
+                subprocess.run(cmd, check=True)
+                return
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                continue
+        raise OSError("Could not set wallpaper. No supported desktop environment found.")
+
+class WallpaperSetterWorker(QThread):
+    """Worker thread to handle wallpaper setting without freezing the UI."""
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, image_data, extension, download_folder):
+        super().__init__()
+        self.image_data = image_data
+        self.extension = extension
+        self.download_folder = download_folder
+
+    def run(self):
+        try:
+            image_url = self.extension.get_download_url(self.image_data)
+            # Check if it's already a local file
+            if os.path.exists(image_url):
+                success, message = WallpaperManager.set_wallpaper(image_url)
+            else:
+                # Download to a temp file, set wallpaper, then clean up
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                    response = requests.get(image_url, stream=True, timeout=30)
+                    response.raise_for_status()
+                    for chunk in response.iter_content(chunk_size=8192):
+                        tmp.write(chunk)
+                    tmp_path = tmp.name
+                
+                success, message = WallpaperManager.set_wallpaper(tmp_path)
+                os.unlink(tmp_path)  # Clean up temp file
+                
+            self.finished.emit(success, message)
+        except Exception as e:
+            self.finished.emit(False, str(e))
