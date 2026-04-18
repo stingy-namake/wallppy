@@ -7,16 +7,17 @@ import shutil
 from pathlib import Path
 from PyQt5.QtCore import QThread, pyqtSignal
 
+
 class WallpaperManager:
     """Cross-platform manager to set the desktop wallpaper."""
-    
+
     _cache_dir = Path.home() / ".cache" / "wallppy"
     _current_wallpaper_path = None
-    
+
     @classmethod
     def _ensure_cache_dir(cls):
         cls._cache_dir.mkdir(parents=True, exist_ok=True)
-    
+
     @classmethod
     def get_cached_path(cls, source_path):
         """Get cached path for a wallpaper copy (prevents file locks on Windows)."""
@@ -41,8 +42,7 @@ class WallpaperManager:
         system = platform.system()
         try:
             image_path = os.path.abspath(image_path)
-            
-            # Windows: copy to cache to avoid file lock issues when original is moved/deleted
+
             if system == "Windows":
                 cached = WallpaperManager.get_cached_path(image_path)
                 if not cached.exists():
@@ -76,6 +76,7 @@ class WallpaperManager:
 
     @staticmethod
     def _set_linux_wallpaper(image_path):
+        # COSMIC desktop (System76)
         cosmic_config = os.path.expanduser("~/.config/cosmic/com.system76.CosmicBackground/v1/all")
         if os.path.exists(cosmic_config):
             try:
@@ -96,20 +97,37 @@ class WallpaperManager:
             except Exception as e:
                 print(f"Failed to set COSMIC wallpaper: {e}")
 
-        commands = [
-            ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", f"file://{image_path}"],
-            ["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", f"file://{image_path}"],
-            ["plasma-apply-wallpaperimage", image_path],
-            ["xfconf-query", "-c", "xfce4-desktop", "-p", "/backdrop/screen0/monitor0/workspace0/last-image", "-s", image_path],
-            ["feh", "--bg-scale", image_path],
+        # Group commands by Desktop Environment
+        command_groups = [
+            # GNOME / Unity / Cinnamon
+            [
+                ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", f"file://{image_path}"],
+                ["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", f"file://{image_path}"]
+            ],
+            # KDE Plasma
+            [["plasma-apply-wallpaperimage", image_path]],
+            # XFCE
+            [["xfconf-query", "-c", "xfce4-desktop", "-p", "/backdrop/screen0/monitor0/workspace0/last-image", "-s", image_path]],
+            # LXQt / PCManFM
+            [["pcmanfm", "--set-wallpaper", image_path]],
+            # Fallback: feh (common on minimal WMs)
+            [["feh", "--bg-scale", image_path]],
         ]
-        for cmd in commands:
-            try:
-                subprocess.run(cmd, check=True)
+
+        for group in command_groups:
+            group_success = False
+            for cmd in group:
+                try:
+                    # Run silently; we only care if at least one command in the group succeeds
+                    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    group_success = True
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    continue
+            if group_success:
                 return
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                continue
+
         raise OSError("Could not set wallpaper. No supported desktop environment found.")
+
 
 class WallpaperSetterWorker(QThread):
     """Worker thread to download (if needed) and set wallpaper without freezing the UI."""
@@ -129,35 +147,35 @@ class WallpaperSetterWorker(QThread):
             ext = self.extension.get_file_extension(self.image_data)
             filename = f"wallppy-{wall_id}.{ext}"
             filepath = os.path.join(self.download_folder, filename)
-            
+
             os.makedirs(self.download_folder, exist_ok=True)
-            
-            # Check if already downloaded locally
+
+            # Already downloaded locally
             if os.path.exists(filepath):
                 success, message = WallpaperManager.set_wallpaper(filepath)
                 if success:
                     WallpaperManager.set_current_wallpaper(filepath)
                 self.finished.emit(success, message, filepath)
                 return
-            
-            # Check if it's already a local file (LocalExtension)
+
+            # Local file (e.g., from LocalExtension)
             if os.path.exists(image_url):
                 success, message = WallpaperManager.set_wallpaper(image_url)
                 if success:
                     WallpaperManager.set_current_wallpaper(image_url)
                 self.finished.emit(success, message, image_url)
                 return
-            
+
             # Download from online source
             self.progress.emit(0)
             from core.workers import get_session
             session = get_session()
             response = session.get(image_url, stream=True, timeout=30)
             response.raise_for_status()
-            
+
             total_size = int(response.headers.get('content-length', 0))
             downloaded = 0
-            
+
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
@@ -165,11 +183,11 @@ class WallpaperSetterWorker(QThread):
                         downloaded += len(chunk)
                         if total_size:
                             self.progress.emit(int(downloaded * 100 / total_size))
-            
+
             success, message = WallpaperManager.set_wallpaper(filepath)
             if success:
                 WallpaperManager.set_current_wallpaper(filepath)
             self.finished.emit(success, message, filepath)
-            
+
         except Exception as e:
             self.finished.emit(False, str(e), "")
