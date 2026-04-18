@@ -7,7 +7,6 @@ from PyQt5.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt5.QtGui import QPixmap
 from core.extension import WallpaperExtension
 from core.workers import ThumbnailLoader
-from core.wallpaper_manager import WallpaperSetterWorker, WallpaperManager
 
 
 THUMB_SIZE = QSize(280, 158)
@@ -33,7 +32,6 @@ class WallpaperWidget(QFrame):
         self.data = wallpaper_data
         self.download_folder = download_folder
         self.thumb_url = extension.get_thumbnail_url(wallpaper_data)
-        self._wallpaper_worker = None
         self._thumb_loader = None
         self._loaded = False
         
@@ -166,7 +164,7 @@ class WallpaperWidget(QFrame):
         self.wallpaper_btn.setCursor(Qt.PointingHandCursor)
         self.wallpaper_btn.setStyleSheet(BUTTON_STYLE)
         self.wallpaper_btn.setFixedSize(36, 30)
-        self.wallpaper_btn.clicked.connect(self.set_as_wallpaper)
+        self.wallpaper_btn.clicked.connect(lambda: self.set_wallpaper_triggered.emit(self.data))
         bottom_layout.addWidget(self.wallpaper_btn)
 
         layout.addLayout(bottom_layout)
@@ -182,27 +180,6 @@ class WallpaperWidget(QFrame):
         except RuntimeError:
             self._thumb_loader = None
             return False
-
-    def set_as_wallpaper(self):
-        self._wallpaper_worker = WallpaperSetterWorker(
-            self.data, self.extension, self.download_folder
-        )
-        self._wallpaper_worker.finished.connect(self._on_wallpaper_set)
-        self._wallpaper_worker.start()
-        self.wallpaper_btn.setEnabled(False)
-        self.wallpaper_btn.setToolTip("Setting wallpaper...")
-
-    def _on_wallpaper_set(self, success: bool, message: str, filepath: str):
-        self.wallpaper_btn.setEnabled(True)
-        self.wallpaper_btn.setToolTip("Set as Desktop Background" if success else message)
-        if not success:
-            QMessageBox.warning(self, "Wallpaper Error", f"Failed to set wallpaper:\n{message}")
-        
-        if success:
-            self.update_downloaded_status()
-            self.update_active_status()
-        
-        self._wallpaper_worker = None
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -225,6 +202,7 @@ class WallpaperWidget(QFrame):
 
     def update_active_status(self):
         """Show blue star if this wallpaper is the current desktop background."""
+        from core.wallpaper_manager import WallpaperManager
         current = WallpaperManager.get_current_wallpaper()
         if not current:
             self.active_indicator.hide()

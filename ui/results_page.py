@@ -804,6 +804,13 @@ class ResultsPage(QWidget):
         if hasattr(main_win, 'status_bar'):
             main_win.status_bar.showMessage("Setting wallpaper...")
         
+        # Disable all wallpaper buttons during the operation
+        for i in range(self.grid_layout.count()):
+            widget = self.grid_layout.itemAt(i).widget()
+            if isinstance(widget, WallpaperWidget):
+                widget.wallpaper_btn.setEnabled(False)
+                widget.wallpaper_btn.setToolTip("Setting wallpaper...")
+        
         self.wallpaper_worker = WallpaperSetterWorker(
             wallpaper_data, self.extension, self.settings.download_folder
         )
@@ -820,12 +827,13 @@ class ResultsPage(QWidget):
             else:
                 main_win.status_bar.showMessage(f"Failed to set wallpaper: {message}")
         
-        # Refresh active indicator on ALL visible widgets so only the new one shows the star
-        if success:
-            for i in range(self.grid_layout.count()):
-                widget = self.grid_layout.itemAt(i).widget()
-                if isinstance(widget, WallpaperWidget):
-                    widget.update_active_status()
+        # Re-enable all buttons and refresh active indicators so only the latest shows ★
+        for i in range(self.grid_layout.count()):
+            widget = self.grid_layout.itemAt(i).widget()
+            if isinstance(widget, WallpaperWidget):
+                widget.wallpaper_btn.setEnabled(True)
+                widget.wallpaper_btn.setToolTip("Set as Desktop Background")
+                widget.update_active_status()
 
     def update_extension(self, new_extension: WallpaperExtension):
         self.extension = new_extension
