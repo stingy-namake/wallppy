@@ -52,6 +52,7 @@ class LocalExtension(WallpaperExtension):
 
     def search(self, query: str, page: int = 1, **kwargs) -> List[Dict[str, Any]]:
         folder = kwargs.get("download_folder", "./wallpapers")
+        sort_by = kwargs.get("sort_by", "modified")  # name, modified, size, resolution
 
         now = time.time()
         cache_valid = (
@@ -75,6 +76,24 @@ class LocalExtension(WallpaperExtension):
                 self._filtered_files = list(self._all_files)
             self._last_query = query
 
+        # Apply sorting (lightweight: in-memory, no extra I/O)
+        if sort_by == "name":
+            self._filtered_files.sort(key=lambda f: os.path.basename(f).lower())
+        elif sort_by == "size":
+            self._filtered_files.sort(key=lambda f: os.stat(f).st_size, reverse=True)
+        elif sort_by == "resolution":
+            # Sort by pixel count (width * height)
+            def get_pixels(path):
+                try:
+                    with Image.open(path) as img:
+                        w, h = img.size
+                        return w * h
+                except:
+                    return 0
+            self._filtered_files.sort(key=get_pixels, reverse=True)
+        else:  # modified (default)
+            self._filtered_files.sort(key=lambda f: os.stat(f).st_mtime, reverse=True)
+
         limit = 24
         start = (page - 1) * limit
         end = start + limit
@@ -83,9 +102,6 @@ class LocalExtension(WallpaperExtension):
         return [self._get_image_info(f) for f in page_files]
 
     def get_total_pages(self, query: str, **kwargs) -> int:
-        if not self._all_files or query != self._last_query:
-            self.search(query, 1, **kwargs)
-        
         limit = 24
         return math.ceil(len(self._filtered_files) / limit) if self._filtered_files else 1
 
@@ -107,4 +123,15 @@ class LocalExtension(WallpaperExtension):
         return wallpaper_data.get("resolution", "?x?")
 
     def get_filters(self) -> Dict[str, Any]:
-        return {}
+        return {
+            "sort_by": {
+                "type": "dropdown",
+                "label": "Sort by",
+                "options": [
+                    {"id": "modified", "label": "Date Modified", "default": True},
+                    {"id": "name", "label": "Name (A-Z)", "default": False},
+                    {"id": "size", "label": "File Size", "default": False},
+                    {"id": "resolution", "label": "Resolution", "default": False},
+                ]
+            }
+        }

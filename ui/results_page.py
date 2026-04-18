@@ -448,6 +448,11 @@ class ResultsPage(QWidget):
             QToolButton:checked {
                 background-color: #1E6FF0;
             }
+            QToolButton:disabled {
+                background-color: #2d2d2d;
+                color: #666;
+                border-color: #3d3d3d;
+            }
         """)
         self.filter_toggle_btn.clicked.connect(self.toggle_filter_panel)
         search_layout.addWidget(self.filter_toggle_btn)
@@ -850,3 +855,10 @@ class ResultsPage(QWidget):
         self.filter_panel.filters_changed.connect(self.on_filters_changed)
         self.filter_panel.setVisible(self.filter_toggle_btn.isChecked())
         layout.insertWidget(1, self.filter_panel)
+
+        # ===== DISABLE FILTER BUTTON IF NO FILTERS AVAILABLE =====
+        has_filters = bool(self.extension.get_filters())
+        self.filter_toggle_btn.setEnabled(has_filters)
+        self.filter_toggle_btn.setVisible(has_filters)
+        if not has_filters:
+            self.filter_panel.setVisible(False)

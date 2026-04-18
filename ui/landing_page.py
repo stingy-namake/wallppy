@@ -181,10 +181,13 @@ class LandingPage(QWidget):
         self.explore_requested.emit()
     
     def on_extension_changed(self, name: str):
-        self.settings.set_extension(name)
+        # Only save to settings if it's NOT Local
+        if name != "Local":
+            self.settings.set_extension(name)
+        
         self.extension_changed.emit(name)
         
-        # Gray out and block search box when using Local source
+        # Local source: disable search and auto-jump to explore page
         if name == "Local":
             self.search_edit.setEnabled(False)
             self.search_edit.setPlaceholderText("Browsing local folder...")
@@ -198,6 +201,8 @@ class LandingPage(QWidget):
                     color: #666;
                 }
             """)
+            # Auto-navigate to explore page
+            self.explore_requested.emit()
         else:
             self.search_edit.setEnabled(True)
             self.search_edit.setPlaceholderText("Search wallpapers...")
