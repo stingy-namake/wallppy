@@ -3,8 +3,8 @@ name: Build and Release Linux Binary
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:    # <-- add this line
+      - 'v*'               # Triggers on tags like v1.0.0
+  workflow_dispatch:        # Allows manual trigger (uses branch name as tag)
 
 permissions:
   contents: write
@@ -30,15 +30,15 @@ jobs:
       - name: Build binary with PyInstaller
         run: |
           TAG="${{ github.ref_name }}"
-          # If manually triggered without a tag, use a default name
-          if [ "$TAG" = "manual" ]; then TAG="dev"; fi
-          BINARY_NAME="wallpy-linux-${TAG}"
-          pyinstaller --onefile --name "$BINARY_NAME" wallpy/main.py
+          # For manual runs without a tag, use the branch name (e.g., 'master')
+          if [ "$TAG" = "manual" ]; then TAG="${GITHUB_REF#refs/heads/}"; fi
+          BINARY_NAME="wallppy-linux-${TAG}"
+          pyinstaller --onefile --name "$BINARY_NAME" wallppy/main.py
 
       - name: Upload binary to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/wallpy-linux-*
+          files: dist/wallppy-linux-*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
