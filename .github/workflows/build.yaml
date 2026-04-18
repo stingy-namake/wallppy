@@ -1,13 +1,12 @@
-name: Build and Release
+name: Build and Release Linux Binary
 
 on:
   push:
     tags:
-      - 'v*'   # Triggers on tags like v1.0.0, v2.1, etc.
+      - 'v*'               # Triggers on tags like v1.0.0, v2.1, etc.
 
 jobs:
   build:
-    name: Build on Ubuntu
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -16,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.11'    # Compatible with anyio 4.13+
 
       - name: Install dependencies
         run: |
@@ -24,18 +23,17 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build with PyInstaller
+      - name: Build binary with PyInstaller
         run: |
-          pyinstaller --clean --noconfirm wallppy.spec
+          # Use the tag name (e.g., v1.0.0) and embed it into the binary name
+          TAG="${{ github.ref_name }}"          # e.g., v1.0.0
+          BINARY_NAME="wallpy-linux-${TAG}"     # e.g., wallpy-linux-v1.0.0
+          pyinstaller --onefile --name "$BINARY_NAME" wallpy/main.py
 
-      - name: Prepare artifact
-        run: |
-          cd dist
-          zip -r ../wallppy-linux.zip wallppy
-
-      - name: Upload artifact to release
+      - name: Upload binary to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: wallppy-linux.zip
+          files: dist/wallpy-linux-*            # Uploads the raw binary
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
