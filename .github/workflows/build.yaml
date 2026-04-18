@@ -7,22 +7,8 @@ on:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            artifact_name: wallppy-linux
-            executable_name: wallppy
-          - os: windows-latest
-            artifact_name: wallppy-windows
-            executable_name: wallppy.exe
-          - os: macos-latest
-            artifact_name: wallppy-macos
-            executable_name: wallppy
-
+    name: Build on Ubuntu
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,22 +28,14 @@ jobs:
         run: |
           pyinstaller --clean --noconfirm wallppy.spec
 
-      - name: Prepare artifact (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Prepare artifact
         run: |
           cd dist
-          zip -r ../${{ matrix.artifact_name }}.zip wallppy
-
-      - name: Prepare artifact (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          cd dist
-          7z a ../${{ matrix.artifact_name }}.zip wallppy.exe
-        shell: bash
+          zip -r ../wallppy-linux.zip wallppy
 
       - name: Upload artifact to release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact_name }}.zip
+          files: wallppy-linux.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

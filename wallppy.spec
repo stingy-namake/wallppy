@@ -44,7 +44,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='Wallppy-standalone-v0.3.0-alpha',
+    name='Wallppy-standalone-v0.4.3-alpha',
     debug=False,
     bootloader_ignore_signals=False,
     strip=True,
