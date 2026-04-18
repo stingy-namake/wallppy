@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'   # Triggers on tags like v1.0.0, v2.1, etc.
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: wallppy-linux
+            executable_name: wallppy
+          - os: windows-latest
+            artifact_name: wallppy-windows
+            executable_name: wallppy.exe
+          - os: macos-latest
+            artifact_name: wallppy-macos
+            executable_name: wallppy
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --clean --noconfirm wallppy.spec
+
+      - name: Prepare artifact (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          zip -r ../${{ matrix.artifact_name }}.zip wallppy
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd dist
+          7z a ../${{ matrix.artifact_name }}.zip wallppy.exe
+        shell: bash
+
+      - name: Upload artifact to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact_name }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
