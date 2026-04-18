@@ -12,6 +12,7 @@ class LandingPage(QWidget):
     search_requested = pyqtSignal(str)
     explore_requested = pyqtSignal()
     extension_changed = pyqtSignal(str)
+    status_message = pyqtSignal(str)  # New signal for status updates
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
@@ -242,6 +243,8 @@ class LandingPage(QWidget):
                 }
             """)
             self.clear_btn.hide()
+            # Emit status message before starting the scan
+            self.status_message.emit("Scanning local folder...")
             self.explore_requested.emit()
         else:
             self.search_edit.setEnabled(True)
@@ -256,6 +259,7 @@ class LandingPage(QWidget):
                 }
             """)
             self.on_search_text_changed(self.search_edit.text())
+            self.status_message.emit("Ready")
 
     def emit_search(self):
         if not self.search_edit.isEnabled():

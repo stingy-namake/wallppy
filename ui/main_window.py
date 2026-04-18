@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
         # Landing page
         self.landing_page = LandingPage(self.settings)
         self.landing_page.search_requested.connect(self.on_search_requested)
+        self.landing_page.status_message.connect(self.on_status_message)
         self.landing_page.explore_requested.connect(self.on_explore_requested)
         self.landing_page.extension_changed.connect(self.on_extension_changed)
         self.stacked.addWidget(self.landing_page)
@@ -85,6 +86,10 @@ class MainWindow(QMainWindow):
         self.stacked.addWidget(self.results_page)
 
         self.stacked.setCurrentIndex(0)
+
+    def on_status_message(self, message: str):
+        """Update the status bar with a temporary message."""
+        self.status_bar.showMessage(message)
 
     def keyPressEvent(self, event):
         if (self.stacked.currentIndex() == 0 and
