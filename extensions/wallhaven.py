@@ -39,17 +39,48 @@ class WallhavenExtension(WallpaperExtension):
             headers["X-API-Key"] = self.api_key
         return headers
     
+    def _build_category_string(self, categories_dict: str) -> str:
+        """Build category string for Wallhaven API."""
+        if isinstance(categories_dict, str) and len(categories_dict) == 3:
+            return categories_dict
+        return "111"
+    
+    def _build_purity_string(self, purity_dict: str) -> str:
+        """Build purity string for Wallhaven API."""
+        if isinstance(purity_dict, str) and len(purity_dict) == 3:
+            return purity_dict
+        return "100"
+    
+    def _strip_wallpaper_data(self, wallpaper: Dict[str, Any]) -> Dict[str, Any]:
+        """Remove unnecessary data to save memory."""
+        return {
+            "id": wallpaper.get("id", ""),
+            "path": wallpaper.get("path", ""),
+            "thumbs": {
+                "large": wallpaper.get("thumbs", {}).get("large", "")
+            },
+            "resolution": wallpaper.get("resolution", "?x?"),
+            "file_type": wallpaper.get("file_type", "image/jpeg"),
+        }
+    
     def search(self, query: str, page: int = 1, **kwargs) -> List[Dict[str, Any]]:
-        category = str(kwargs.get("category", "111")).strip()
-        purity = str(kwargs.get("purity", "100")).strip()
+        # Handle categories
+        category_val = kwargs.get("categories", kwargs.get("category", "111"))
+        category = self._build_category_string(category_val)
         
+        # Handle purity
+        purity_val = kwargs.get("purity", "100")
+        purity = self._build_purity_string(purity_val)
+        
+        # Build API parameters
         params = {
-            "q": query,
+            "q": query if query else "",
             "categories": category,
             "purity": purity,
             "page": page,
         }
         
+        # Add sorting parameters
         sorting = kwargs.get("sorting", "date_added")
         params["sorting"] = sorting
         params["order"] = "desc"
@@ -58,13 +89,17 @@ class WallhavenExtension(WallpaperExtension):
             top_range = kwargs.get("top_range", "1M")
             params["topRange"] = top_range
         
+        # Add resolution filter
         resolution = kwargs.get("resolution", "")
         if resolution:
             params["resolutions"] = resolution
         
+        # Add aspect ratio filter
         ratio = kwargs.get("ratio", "")
         if ratio:
             params["ratios"] = ratio
+        
+        print(f"[Wallhaven] Search params: {params}")
         
         try:
             response = self.session.get(
@@ -76,9 +111,17 @@ class WallhavenExtension(WallpaperExtension):
             response.raise_for_status()
             data = response.json()
             self._last_meta = data.get("meta", {})
-            return data.get("data", [])
-        except Exception as e:
+            
+            # Strip unnecessary data to save memory
+            raw_data = data.get("data", [])
+            stripped_data = [self._strip_wallpaper_data(wp) for wp in raw_data]
+            
+            return stripped_data
+        except requests.exceptions.RequestException as e:
             print(f"Wallhaven error: {e}")
+            return []
+        except Exception as e:
+            print(f"Wallhaven unexpected error: {e}")
             return []
     
     def get_total_pages(self, query: str, **kwargs) -> int:
@@ -91,7 +134,7 @@ class WallhavenExtension(WallpaperExtension):
         return wallpaper_data.get("path", "")
     
     def get_wallpaper_id(self, wallpaper_data: Dict[str, Any]) -> str:
-        return wallpaper_data.get("id", "")
+        return str(wallpaper_data.get("id", ""))
     
     def get_file_extension(self, wallpaper_data: Dict[str, Any]) -> str:
         file_type = wallpaper_data.get("file_type", "image/jpeg")
@@ -126,7 +169,7 @@ class WallhavenExtension(WallpaperExtension):
             },
             "sorting": {
                 "type": "dropdown",
-                "label": "Sorting",
+                "label": "Sort by",
                 "options": [
                     {"id": "date_added", "label": "Date Added", "default": True},
                     {"id": "relevance", "label": "Relevance", "default": False},
