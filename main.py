@@ -2,17 +2,46 @@
 
 import os
 import sys
+import subprocess
 
-# Detect and fix GNOME Wayland crash before Qt loads
-if sys.platform.startswith('linux'):
-    # Check if we're on GNOME Wayland
+def is_gnome_wayland():
+    """Detect if running on GNOME Wayland using multiple methods"""
+    
+    # Method 1: Environment variables
     session_type = os.environ.get('XDG_SESSION_TYPE', '')
     desktop = os.environ.get('XDG_CURRENT_DESKTOP', '')
     
     if session_type == 'wayland' and desktop == 'GNOME':
-        # Force X11 only on GNOME Wayland to prevent Qt crashes
-        os.environ['QT_QPA_PLATFORM'] = 'xcb'
+        return True
+    
+    # Method 2: Check if we can detect GNOME Wayland via loginctl
+    try:
+        result = subprocess.run(['loginctl', 'show-session', 'self', '-p', 'Type'], 
+                              capture_output=True, text=True)
+        if 'Type=wayland' in result.stdout:
+            # Now check if GNOME
+            desktop_result = subprocess.run(['echo', '$XDG_CURRENT_DESKTOP'], 
+                                          shell=True, capture_output=True, text=True)
+            if 'GNOME' in os.environ.get('XDG_CURRENT_DESKTOP', ''):
+                return True
+    except:
+        pass
+    
+    # Method 3: Check for GNOME-specific Wayland compositor
+    if os.environ.get('WAYLAND_DISPLAY') and 'gnome' in os.environ.get('DESKTOP_SESSION', '').lower():
+        return True
+    
+    return False
 
+# Apply fix before Qt loads
+if sys.platform.startswith('linux'):
+    if is_gnome_wayland():
+        os.environ['QT_QPA_PLATFORM'] = 'xcb'
+        # Also set these for better compatibility
+        os.environ['QT_AUTO_SCREEN_SCALE_FACTOR'] = '0'
+        os.environ['QT_SCALE_FACTOR'] = '1'
+
+# Now import Qt
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 from core.settings import Settings
