@@ -41,64 +41,6 @@ class WallpaperManager:
         return cls._current_wallpaper_path
 
     @staticmethod
-    def _get_desktop_environment():
-        """Detect the current desktop environment."""
-        desktop = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
-        if 'gnome' in desktop:
-            return 'gnome'
-        elif 'kde' in desktop or 'plasma' in desktop:
-            return 'kde'
-        elif 'xfce' in desktop:
-            return 'xfce'
-        elif 'cosmic' in desktop:
-            return 'cosmic'
-        elif 'sway' in desktop:
-            return 'sway'
-        elif 'hyprland' in desktop:
-            return 'hyprland'
-        return desktop
-
-    @staticmethod
-    def _get_dbus_session_env():
-        """Get the D-Bus session environment variables from the user's session."""
-        env = os.environ.copy()
-        
-        # Try to find the D-Bus session address from various sources
-        dbus_address = os.environ.get('DBUS_SESSION_BUS_ADDRESS', '')
-        
-        if not dbus_address:
-            # Try to read from user's dbus session file
-            dbus_file = os.path.expanduser(f'~/.dbus/session-bus/{os.uname().nodename}-{os.getuid()}')
-            if os.path.exists(dbus_file):
-                try:
-                    with open(dbus_file, 'r') as f:
-                        for line in f:
-                            if 'DBUS_SESSION_BUS_ADDRESS' in line:
-                                dbus_address = line.strip().split('=', 1)[1]
-                                break
-                except Exception:
-                    pass
-        
-        if not dbus_address:
-            # Try to get from dbus-launch
-            try:
-                result = subprocess.run(
-                    ['dbus-launch', '--sh-syntax'],
-                    capture_output=True, text=True, timeout=2
-                )
-                for line in result.stdout.split('\n'):
-                    if 'DBUS_SESSION_BUS_ADDRESS' in line:
-                        dbus_address = line.strip().split('=', 1)[1].strip("'\"")
-                        break
-            except Exception:
-                pass
-        
-        if dbus_address:
-            env['DBUS_SESSION_BUS_ADDRESS'] = dbus_address
-        
-        return env
-
-    @staticmethod
     def set_wallpaper(image_path):
         """Set the desktop wallpaper based on the current OS."""
         system = platform.system()
@@ -137,81 +79,112 @@ class WallpaperManager:
         subprocess.run(["osascript", "-e", script], check=True, timeout=10)
 
     @staticmethod
-    def _set_gnome_wallpaper(image_path, env):
-        """Set GNOME wallpaper - tries multiple methods."""
+    def _set_gnome_wallpaper_direct(image_path):
+        """Set GNOME wallpaper by writing directly to config files (works in PyInstaller)."""
         escaped_path = image_path.replace('\\', '\\\\')
         file_uri = f"file://{escaped_path}"
         
-        # Method 1: Direct gsettings with preserved environment
-        try:
-            result = subprocess.run(
-                ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", file_uri],
-                env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5
-            )
-            if result.returncode == 0:
-                # Also set dark variant
-                subprocess.run(
-                    ["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", file_uri],
-                    env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
-                )
-                return True
-        except Exception:
-            pass
+        success = False
         
-        # Method 2: dbus-send (bypasses gsettings entirely)
-        try:
-            cmd = [
-                "dbus-send", "--session",
-                "--dest=org.gnome.Shell",
-                "--type=method_call",
-                "--print-reply",
-                "/org/gnome/Shell",
-                "org.gnome.Shell.Eval",
-                f"string:global.background_settings.set_string('picture-uri', '{file_uri}')"
-            ]
-            result = subprocess.run(cmd, env=env, check=False, capture_output=True, timeout=5)
-            if result.returncode == 0:
-                return True
-        except Exception:
-            pass
-        
-        # Method 3: dconf
+        # Method 1: Write to dconf database directly using dconf (if available)
         try:
             result = subprocess.run(
                 ["dconf", "write", "/org/gnome/desktop/background/picture-uri", f"'{file_uri}'"],
-                env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
             )
             if result.returncode == 0:
-                return True
+                subprocess.run(
+                    ["dconf", "write", "/org/gnome/desktop/background/picture-uri-dark", f"'{file_uri}'"],
+                    check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                )
+                success = True
         except Exception:
             pass
         
-        return False
-
-    @staticmethod
-    def _set_linux_wallpaper(image_path):
-        """Set wallpaper on Linux - detects DE and uses appropriate method."""
-        escaped_path = image_path.replace('\\', '\\\\')
-        file_uri = f"file://{escaped_path}"
-        env = WallpaperManager._get_dbus_session_env()
-        desktop = WallpaperManager._get_desktop_environment()
+        # Method 2: Write to GNOME's keyfile backend
+        keyfile_dir = os.path.expanduser("~/.config/dconf")
+        keyfile_path = os.path.join(keyfile_dir, "user")
         
-        # Try GNOME methods first (most common)
-        if 'gnome' in desktop or not desktop:
-            if WallpaperManager._set_gnome_wallpaper(image_path, env):
-                return
-        
-        # ===== KDE Plasma =====
-        if 'kde' in desktop or 'plasma' in desktop:
+        if os.path.exists(keyfile_dir):
             try:
+                # Use gsettings with explicit keyfile backend
+                env = os.environ.copy()
+                env['GSETTINGS_BACKEND'] = 'keyfile'
+                env['DCONF_PROFILE'] = ''
+                
                 result = subprocess.run(
-                    ["plasma-apply-wallpaperimage", image_path],
+                    ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", file_uri],
                     env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
                 )
                 if result.returncode == 0:
-                    return
+                    subprocess.run(
+                        ["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", file_uri],
+                        env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                    )
+                    success = True
             except Exception:
                 pass
+        
+        # Method 3: Write directly to dconf user database using dbus-launch
+        if not success:
+            try:
+                cmd = f"dbus-launch --exit-with-session gsettings set org.gnome.desktop.background picture-uri '{file_uri}'"
+                result = subprocess.run(
+                    ["bash", "-c", cmd],
+                    check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                )
+                if result.returncode == 0:
+                    cmd_dark = f"dbus-launch --exit-with-session gsettings set org.gnome.desktop.background picture-uri-dark '{file_uri}'"
+                    subprocess.run(["bash", "-c", cmd_dark], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                    success = True
+            except Exception:
+                pass
+        
+        # Method 4: Use gconftool-2 (older GNOME)
+        if not success:
+            try:
+                result = subprocess.run(
+                    ["gconftool-2", "--set", "/desktop/gnome/background/picture_filename", "--type", "string", image_path],
+                    check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                )
+                if result.returncode == 0:
+                    success = True
+            except Exception:
+                pass
+        
+        # Method 5: Use xfconf if on XFCE (some GNOME systems have it)
+        if not success:
+            try:
+                result = subprocess.run(
+                    ["xfconf-query", "-c", "xfce4-desktop", "-p", "/backdrop/screen0/monitor0/workspace0/last-image", "-s", image_path],
+                    check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                )
+                if result.returncode == 0:
+                    success = True
+            except Exception:
+                pass
+        
+        return success
+
+    @staticmethod
+    def _set_linux_wallpaper(image_path):
+        """Set wallpaper on Linux - tries multiple methods."""
+        escaped_path = image_path.replace('\\', '\\\\')
+        
+        # Try GNOME methods first (most common)
+        if WallpaperManager._set_gnome_wallpaper_direct(image_path):
+            return
+        
+        # ===== KDE Plasma =====
+        try:
+            result = subprocess.run(
+                ["plasma-apply-wallpaperimage", image_path],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+            )
+            if result.returncode == 0:
+                return
+        except Exception:
+            pass
         
         # ===== COSMIC =====
         cosmic_config = os.path.expanduser("~/.config/cosmic/com.system76.CosmicBackground/v1/all")
@@ -241,7 +214,7 @@ class WallpaperManager:
         try:
             result = subprocess.run(
                 ["swaymsg", f"output * bg {image_path} fill"],
-                env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
             )
             if result.returncode == 0:
                 return
@@ -252,22 +225,11 @@ class WallpaperManager:
         try:
             subprocess.run(
                 ["hyprctl", "hyprpaper", "preload", image_path],
-                env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3
             )
             result = subprocess.run(
                 ["hyprctl", "hyprpaper", "wallpaper", f",{image_path}"],
-                env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
-            )
-            if result.returncode == 0:
-                return
-        except Exception:
-            pass
-        
-        # ===== XFCE =====
-        try:
-            result = subprocess.run(
-                ["xfconf-query", "-c", "xfce4-desktop", "-p", "/backdrop/screen0/monitor0/workspace0/last-image", "-s", image_path],
-                env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
             )
             if result.returncode == 0:
                 return
@@ -278,14 +240,25 @@ class WallpaperManager:
         try:
             result = subprocess.run(
                 ["feh", "--bg-scale", image_path],
-                env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
             )
             if result.returncode == 0:
                 return
         except Exception:
             pass
         
-        raise OSError(f"Could not set wallpaper. Desktop: {desktop}")
+        # ===== nitrogen =====
+        try:
+            result = subprocess.run(
+                ["nitrogen", "--set-zoom-fill", image_path],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
+            )
+            if result.returncode == 0:
+                return
+        except Exception:
+            pass
+        
+        raise OSError("Could not set wallpaper. No supported desktop environment found.")
 
 
 class WallpaperSetterWorker(QThread):

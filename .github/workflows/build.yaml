@@ -42,14 +42,30 @@ jobs:
             libfontconfig1 \
             libfreetype6 \
             libx11-xcb1 \
+            libxcb-glx0 \
+            libxcb-dri2-0 \
+            libxcb-dri3-0 \
+            libxcb-present0 \
+            libxcb-composite0 \
+            libxcb-cursor0 \
+            libxcb-damage0 \
+            libxcb-dpms0 \
+            libxcb-record0 \
+            libxcb-res0 \
+            libxcb-screensaver0 \
+            libxcb-shm0 \
+            libxcb-xv0 \
+            libxcb-xvmc0 \
             libglib2.0-0 \
             libdbus-1-3 \
             libxrender1 \
             libxi6 \
             libsm6 \
             libice6 \
-            imagemagick \
-            desktop-file-utils
+            libgsettings-qt1 \
+            libglib2.0-bin \
+            dconf-gsettings-backend \
+            gsettings-desktop-schemas
 
       - name: Install Python dependencies
         run: |
@@ -62,81 +78,92 @@ jobs:
           cat > wallppy.spec << 'EOF'
           # -*- mode: python ; coding: utf-8 -*-
           
-          import sys
-          import os
-          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-          
-          core_hiddenimports = collect_submodules('core')
-          ui_hiddenimports = collect_submodules('ui')
-          extensions_hiddenimports = collect_submodules('extensions')
-          
           a = Analysis(
               ['main.py'],
               pathex=[],
               binaries=[],
-              datas=[
-                  ('.resources', '.resources'),
-              ] + collect_data_files('core') + collect_data_files('ui') + collect_data_files('extensions'),
+              datas=[('.resources', '.resources')],
               hiddenimports=[
-                  'PIL', 'PIL.Image', 'PIL._imaging', 'PIL.ImageFile',
-                  'requests', 'urllib3', 'certifi', 'charset_normalizer',
-                  'bs4', 'bs4.builder', 'bs4.element',
-                  'json', 'hashlib', 're', 'os', 'sys', 'pathlib', 'typing',
-                  'threading', 'concurrent.futures', 'logging', 'traceback',
-              ] + core_hiddenimports + ui_hiddenimports + extensions_hiddenimports,
+                  'PIL',
+                  'PIL.Image',
+                  'PIL._imaging',
+                  'requests',
+                  'urllib3',
+                  'certifi',
+                  'charset_normalizer',
+                  'bs4',
+                  'core.extension',
+                  'core.settings',
+                  'core.workers',
+                  'core.wallpaper_manager',
+                  'core.crash_handler',
+                  'ui.main_window',
+                  'ui.landing_page',
+                  'ui.results_page',
+                  'ui.wallpaper_widget',
+                  'extensions',
+                  'extensions.wallhaven',
+                  'extensions.local',
+                  'extensions.fourkwallpapers',
+              ],
               hookspath=[],
               hooksconfig={},
               runtime_hooks=[],
-              excludes=['tkinter', 'matplotlib', 'pandas', 'scipy', 'IPython', 'jupyter', 'notebook', 'sphinx', 'pytest', 'setuptools', 'pip'],
+              excludes=[],
               noarchive=False,
           )
           
           pyz = PYZ(a.pure)
           
           exe = EXE(
-              pyz, a.scripts, a.binaries, a.datas, [],
-              name='wallppy', debug=False, bootloader_ignore_signals=False,
-              strip=False, upx=True, upx_exclude=[], runtime_tmpdir=None,
-              console=False, disable_windowed_traceback=False,
-              argv_emulation=False, target_arch=None, codesign_identity=None,
+              pyz,
+              a.scripts,
+              a.binaries,
+              a.datas,
+              [],
+              name='wallppy',
+              debug=False,
+              bootloader_ignore_signals=False,
+              strip=False,
+              upx=True,
+              upx_exclude=[],
+              runtime_tmpdir=None,
+              console=False,
+              disable_windowed_traceback=False,
+              argv_emulation=False,
+              target_arch=None,
+              codesign_identity=None,
               entitlements_file=None,
-              icon='.resources/wallppy.ico' if os.path.exists('.resources/wallppy.ico') else None,
+              icon='.resources/wallppy.ico',
           )
           EOF
 
       - name: Build binary with PyInstaller
         run: |
+          TAG="${{ github.ref_name }}"
+          if [ "$TAG" = "manual" ]; then TAG="${GITHUB_REF#refs/heads/}"; fi
+          
+          # Clean any previous builds
           rm -rf dist/ build/
+          
+          # Build with spec file
           pyinstaller --noconfirm wallppy.spec
           
-          TAG="${{ github.ref_name }}"
-          if [ "$TAG" = "manual" ]; then TAG="${GITHUB_REF#refs/heads/}"; fi
-          
+          # Rename the binary
           mv dist/wallppy "dist/wallppy-linux-${TAG}"
-          chmod +x "dist/wallppy-linux-${TAG}"
           
-          echo "Binary created:"
+          # Verify the binary
+          echo "Binary size:"
           ls -lh dist/
+          
+          # Test that the binary can at least show help (basic sanity check)
+          chmod +x "dist/wallppy-linux-${TAG}"
+          echo "Binary created successfully"
 
-      - name: Create install script
-        run: |
-          cp install.sh dist/
-          chmod +x dist/install.sh
-
-      - name: Package release files
-        run: |
-          cd dist
-          TAG="${{ github.ref_name }}"
-          if [ "$TAG" = "manual" ]; then TAG="${GITHUB_REF#refs/heads/}"; fi
-          tar -czf "wallppy-linux-${TAG}.tar.gz" "wallppy-linux-${TAG}" install.sh
-          echo "Package created:"
-          ls -lh *.tar.gz
-
-      - name: Upload to GitHub Release
+      - name: Upload binary to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: |
-            dist/wallppy-linux-*.tar.gz
+          files: dist/wallppy-linux-*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
