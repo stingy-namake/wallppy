@@ -76,56 +76,175 @@ class WallpaperManager:
 
     @staticmethod
     def _set_linux_wallpaper(image_path):
-        # COSMIC desktop (System76)
-        cosmic_config = os.path.expanduser("~/.config/cosmic/com.system76.CosmicBackground/v1/all")
-        if os.path.exists(cosmic_config):
+        """Set wallpaper on Linux - supports GNOME, KDE, XFCE, COSMIC, Sway, Hyprland."""
+        escaped_path = image_path.replace('\\', '\\\\')
+        file_uri = f"file://{escaped_path}"
+        
+        # ===== GNOME / Unity / Cinnamon (Wayland & X11) =====
+        # Try multiple gsettings commands - they work on both X11 and Wayland
+        gnome_commands = [
+            ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", file_uri],
+            ["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", file_uri],
+            ["gsettings", "set", "org.gnome.desktop.screensaver", "picture-uri", file_uri],
+        ]
+        
+        gnome_success = False
+        for cmd in gnome_commands:
             try:
-                escaped_path = image_path.replace('\\', '\\\\')
+                result = subprocess.run(
+                    cmd, 
+                    check=False,  # Don't raise on error, we'll check return code
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.PIPE,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    gnome_success = True
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                continue
+        
+        if gnome_success:
+            return
+        
+        # ===== COSMIC desktop (System76) =====
+        cosmic_config = os.path.expanduser("~/.config/cosmic/com.system76.CosmicBackground/v1/all")
+        if os.path.exists(os.path.dirname(cosmic_config)):
+            try:
+                os.makedirs(os.path.dirname(cosmic_config), exist_ok=True)
                 pattern = r'source: Path\(".*?"\)'
                 replacement = f'source: Path("{escaped_path}")'
-
-                with open(cosmic_config, 'r') as f:
-                    content = f.read()
-                new_content = re.sub(pattern, replacement, content)
-
-                if "source:" not in new_content:
-                    new_content += f"\nsource: Path(\"{escaped_path}\")"
-
+                
+                if os.path.exists(cosmic_config):
+                    with open(cosmic_config, 'r') as f:
+                        content = f.read()
+                    new_content = re.sub(pattern, replacement, content)
+                    if "source:" not in new_content:
+                        new_content += f'\nsource: Path("{escaped_path}")'
+                else:
+                    new_content = f'source: Path("{escaped_path}")\n'
+                    
                 with open(cosmic_config, 'w') as f:
                     f.write(new_content)
                 return
             except Exception as e:
                 print(f"Failed to set COSMIC wallpaper: {e}")
-
-        # Group commands by Desktop Environment
-        command_groups = [
-            # GNOME / Unity / Cinnamon
-            [
-                ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", f"file://{image_path}"],
-                ["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", f"file://{image_path}"]
-            ],
-            # KDE Plasma
-            [["plasma-apply-wallpaperimage", image_path]],
-            # XFCE
-            [["xfconf-query", "-c", "xfce4-desktop", "-p", "/backdrop/screen0/monitor0/workspace0/last-image", "-s", image_path]],
-            # LXQt / PCManFM
-            [["pcmanfm", "--set-wallpaper", image_path]],
-            # Fallback: feh (common on minimal WMs)
-            [["feh", "--bg-scale", image_path]],
-        ]
-
-        for group in command_groups:
-            group_success = False
-            for cmd in group:
-                try:
-                    # Run silently; we only care if at least one command in the group succeeds
-                    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    group_success = True
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    continue
-            if group_success:
+        
+        # ===== KDE Plasma (X11 and Wayland) =====
+        try:
+            result = subprocess.run(
+                ["plasma-apply-wallpaperimage", image_path],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5
+            )
+            if result.returncode == 0:
                 return
-
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        
+        # ===== Sway (Wayland) =====
+        try:
+            result = subprocess.run(
+                ["swaymsg", f"output * bg {image_path} fill"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        
+        # ===== Hyprland (Wayland) =====
+        try:
+            # Preload and set wallpaper
+            subprocess.run(
+                ["hyprctl", "hyprpaper", "preload", image_path],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3
+            )
+            result = subprocess.run(
+                ["hyprctl", "hyprpaper", "wallpaper", f",{image_path}"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        
+        # ===== XFCE =====
+        try:
+            # Try to get monitor name
+            monitor_name = "monitor0"
+            try:
+                result = subprocess.run(
+                    ["xrandr", "--listmonitors"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2
+                )
+                monitors = result.stdout.strip().split('\n')
+                if len(monitors) > 1:
+                    match = re.search(r'(\S+)$', monitors[1])
+                    if match:
+                        monitor_name = match.group(1)
+            except Exception:
+                pass
+            
+            # Set for each workspace
+            xfce_success = False
+            for ws in range(4):
+                try:
+                    result = subprocess.run([
+                        "xfconf-query", "-c", "xfce4-desktop", "-p",
+                        f"/backdrop/screen0/{monitor_name}/workspace{ws}/last-image",
+                        "-s", image_path
+                    ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+                    if result.returncode == 0:
+                        xfce_success = True
+                except Exception:
+                    continue
+            if xfce_success:
+                return
+        except Exception:
+            pass
+        
+        # ===== feh (minimal WMs) =====
+        try:
+            result = subprocess.run(
+                ["feh", "--bg-scale", image_path],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        
+        # ===== nitrogen (alternative) =====
+        try:
+            result = subprocess.run(
+                ["nitrogen", "--set-zoom-fill", image_path],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        
+        # If we get here, nothing worked
         raise OSError("Could not set wallpaper. No supported desktop environment found.")
 
 

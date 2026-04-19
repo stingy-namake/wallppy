@@ -98,9 +98,7 @@ class WallhavenExtension(WallpaperExtension):
         ratio = kwargs.get("ratio", "")
         if ratio:
             params["ratios"] = ratio
-        
-        print(f"[Wallhaven] Search params: {params}")
-        
+                
         try:
             response = self.session.get(
                 self.api_url,

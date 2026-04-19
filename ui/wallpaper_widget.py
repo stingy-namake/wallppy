@@ -46,7 +46,6 @@ class ShimmerLabel(QLabel):
     def start_shimmer(self):
         if self._shimmer_anim:
             return
-        # Use "shimmerValue" (the Qt property) instead of "_shimmer_value"
         self._shimmer_anim = QPropertyAnimation(self, b"shimmerValue")
         self._shimmer_anim.setDuration(1200)
         self._shimmer_anim.setStartValue(-0.5)
@@ -68,7 +67,6 @@ class ShimmerLabel(QLabel):
         self._shimmer_value = value
         self.update()
 
-    # Register as a Qt property so QPropertyAnimation can find it
     shimmerValue = pyqtProperty(float, fget=getShimmerValue, fset=setShimmerValue)
 
 
@@ -85,9 +83,9 @@ class WallpaperWidget(QFrame):
         self.thumb_url = extension.get_thumbnail_url(wallpaper_data)
         self._thumb_loader = None
         self._loaded = False
+        self._is_setting_wallpaper = False  # Track if wallpaper is being set
 
         self.setFrameShape(QFrame.StyledPanel)
-        # CSS hover effect instead of QPropertyAnimation on graphicsEffect
         self.setStyleSheet("""
             WallpaperWidget {
                 background-color: #2a2a2f;
@@ -186,6 +184,10 @@ class WallpaperWidget(QFrame):
             QToolButton:hover {
                 background-color: rgba(80, 80, 85, 1);
             }
+            QToolButton:disabled {
+                background-color: rgba(40, 40, 45, 0.7);
+                color: #888;
+            }
         """
 
         self.expand_btn = QToolButton()
@@ -203,12 +205,33 @@ class WallpaperWidget(QFrame):
         self.wallpaper_btn.setCursor(Qt.PointingHandCursor)
         self.wallpaper_btn.setStyleSheet(BUTTON_STYLE)
         self.wallpaper_btn.setFixedSize(36, 30)
-        self.wallpaper_btn.clicked.connect(lambda: self.set_wallpaper_triggered.emit(self.data))
+        self.wallpaper_btn.clicked.connect(self._on_set_wallpaper_clicked)
         bottom_layout.addWidget(self.wallpaper_btn)
 
         layout.addLayout(bottom_layout)
         self.setLayout(layout)
         self.setFixedSize(THUMB_SIZE.width() + 20, THUMB_SIZE.height() + 54)
+
+    def _on_set_wallpaper_clicked(self):
+        """Handle set wallpaper click with spam prevention."""
+        if self._is_setting_wallpaper:
+            return  # Already setting, ignore
+        
+        self._is_setting_wallpaper = True
+        self.wallpaper_btn.setEnabled(False)
+        self.wallpaper_btn.setText("⏳")
+        self.wallpaper_btn.setToolTip("Setting wallpaper...")
+        
+        # Emit the signal
+        self.set_wallpaper_triggered.emit(self.data)
+
+    def on_wallpaper_set_complete(self, success: bool):
+        """Called when wallpaper setting is complete (success or failure)."""
+        self._is_setting_wallpaper = False
+        self.wallpaper_btn.setEnabled(True)
+        self.wallpaper_btn.setText("🖵")
+        self.wallpaper_btn.setToolTip("Set as Desktop Background")
+        self.update_active_status()
 
     def _is_loader_running(self):
         if not self._thumb_loader:
@@ -309,6 +332,7 @@ class WallpaperWidget(QFrame):
             self._thumb_loader.wait(100)
         self._thumb_loader = None
         self._loaded = False
+        self._is_setting_wallpaper = False
         self.thumb_label.stop_shimmer()
         self.thumb_label.start_shimmer()
         self.checkmark_btn.hide()

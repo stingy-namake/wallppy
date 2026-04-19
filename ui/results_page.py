@@ -1210,21 +1210,25 @@ class ResultsPage(QWidget):
         if hasattr(main_win, 'status_bar'):
             main_win.status_bar.showMessage("Setting wallpaper...")
 
+        # Disable all wallpaper buttons during the operation
         for i in range(self.grid_layout.count()):
             widget = self.grid_layout.itemAt(i).widget()
             if isinstance(widget, WallpaperWidget):
                 widget.wallpaper_btn.setEnabled(False)
+                widget.wallpaper_btn.setText("⟳")
                 widget.wallpaper_btn.setToolTip("Setting wallpaper...")
 
         self.wallpaper_worker = WallpaperSetterWorker(
             wallpaper_data, self.extension, self.settings.download_folder
         )
-        self.wallpaper_worker.finished.connect(self.on_wallpaper_set)
+        self.wallpaper_worker.finished.connect(lambda s, m, p: self._on_wallpaper_set_complete(s, m))
         self.wallpaper_worker.finished.connect(lambda *args: self._remove_worker(self.wallpaper_worker))
         self.wallpaper_worker.start()
         self._active_workers.append(self.wallpaper_worker)
 
-    def on_wallpaper_set(self, success, message):
+
+    def _on_wallpaper_set_complete(self, success, message):
+        """Handle wallpaper set completion for all widgets."""
         main_win = self.window()
         if hasattr(main_win, 'status_bar'):
             if success:
@@ -1232,12 +1236,17 @@ class ResultsPage(QWidget):
             else:
                 main_win.status_bar.showMessage(f"Failed to set wallpaper: {message}")
 
+        # Re-enable all buttons and refresh active indicators
         for i in range(self.grid_layout.count()):
             widget = self.grid_layout.itemAt(i).widget()
             if isinstance(widget, WallpaperWidget):
-                widget.wallpaper_btn.setEnabled(True)
-                widget.wallpaper_btn.setToolTip("Set as Desktop Background")
-                widget.update_active_status()
+                widget.on_wallpaper_set_complete(success)
+
+
+    # Remove the old on_wallpaper_set method or keep it for compatibility
+    def on_wallpaper_set(self, success, message):
+        """Kept for compatibility - use _on_wallpaper_set_complete instead."""
+        self._on_wallpaper_set_complete(success, message)
 
     def update_extension(self, new_extension: WallpaperExtension):
         self.extension = new_extension
