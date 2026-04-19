@@ -31,13 +31,14 @@ NO_RESULTS_MESSAGES = [
 
 
 class AnimatedFilterPanel(QFrame):
-    """Collapsible panel with smooth expand/collapse animation and scrollable content."""
-    filters_changed = pyqtSignal()
+    """Collapsible panel with smooth expand/collapse animation, scrollable content, and Apply button."""
+    apply_clicked = pyqtSignal(dict)  # Emits the filter values
 
     def __init__(self, extension: WallpaperExtension, parent=None):
         super().__init__(parent)
         self.extension = extension
         self.widgets = {}
+        self._last_applied_values = None  # Track last applied filters
         self.setFrameShape(QFrame.StyledPanel)
         self.setStyleSheet("""
             AnimatedFilterPanel {
@@ -51,12 +52,10 @@ class AnimatedFilterPanel(QFrame):
         self._animation = None
 
     def init_ui(self):
-        # Main layout for the panel (contains only the scroll area)
         panel_layout = QVBoxLayout(self)
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.setSpacing(0)
 
-        # Scroll area to handle overflow
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.NoFrame)
@@ -82,14 +81,12 @@ class AnimatedFilterPanel(QFrame):
                 background: none;
             }
         """)
-        # Limit maximum height to prevent taking over the whole window
         self.scroll_area.setMaximumHeight(400)
 
-        # Content widget inside scroll area
         content_widget = QWidget()
         content_widget.setStyleSheet("background-color: transparent;")
         main_layout = QVBoxLayout(content_widget)
-        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setContentsMargins(12, 12, 12, 8)
         main_layout.setSpacing(12)
         main_layout.setAlignment(Qt.AlignTop)
 
@@ -118,7 +115,6 @@ class AnimatedFilterPanel(QFrame):
                 for opt in options:
                     cb = QCheckBox(opt["label"])
                     cb.setChecked(opt.get("default", False))
-                    cb.stateChanged.connect(self.filters_changed.emit)
                     cb.setStyleSheet("color: white;")
                     cb_layout.addWidget(cb)
                     key = f"{filter_id}.{opt['id']}"
@@ -156,14 +152,45 @@ class AnimatedFilterPanel(QFrame):
                         default_index = i
 
                 combo.setCurrentIndex(default_index)
-                combo.currentIndexChanged.connect(self.filters_changed.emit)
                 group_layout.addWidget(combo)
                 self.widgets[filter_id] = combo
 
             main_layout.addWidget(group_widget)
 
+        # Apply button
+        self.apply_btn = QPushButton("Apply Filters")
+        self.apply_btn.setFixedHeight(32)
+        self.apply_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1E6FF0;
+                color: white;
+                border-radius: 4px;
+                font-size: 13px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #3D82F5;
+            }
+            QPushButton:pressed {
+                background-color: #1558C4;
+            }
+            QPushButton:disabled {
+                background-color: #555;
+                color: #999;
+            }
+        """)
+        self.apply_btn.clicked.connect(self._on_apply_clicked)
+        main_layout.addWidget(self.apply_btn)
+
         self.scroll_area.setWidget(content_widget)
         panel_layout.addWidget(self.scroll_area)
+
+    def _on_apply_clicked(self):
+        """Check if filters changed before emitting."""
+        current_values = self.get_filter_values()
+        if current_values != self._last_applied_values:
+            self._last_applied_values = current_values.copy()
+            self.apply_clicked.emit(current_values)
 
     def get_filter_values(self) -> dict:
         filters = self.extension.get_filters()
@@ -207,6 +234,14 @@ class AnimatedFilterPanel(QFrame):
 
         return values
 
+    def set_apply_enabled(self, enabled: bool):
+        """Enable or disable the Apply button."""
+        self.apply_btn.setEnabled(enabled)
+
+    def reset_last_applied(self):
+        """Clear the last applied values (useful when extension changes)."""
+        self._last_applied_values = None
+
     def animate_toggle(self, expand):
         if self._animation and self._animation.state() == QPropertyAnimation.Running:
             self._animation.stop()
@@ -216,9 +251,7 @@ class AnimatedFilterPanel(QFrame):
             self._animation = QPropertyAnimation(self, b"maximumHeight")
             self._animation.setDuration(200)
             self._animation.setStartValue(0)
-            # Use the scroll area's content height plus some padding
             content_height = self.scroll_area.widget().sizeHint().height() + 24
-            # Cap at 400px or content height, whichever is smaller
             target_height = min(content_height, 400)
             self._animation.setEndValue(target_height)
             self._animation.setEasingCurve(QEasingCurve.OutCubic)
@@ -370,7 +403,6 @@ class ImageOverlay(QWidget):
         self.loader.start()
 
     def _cancel_loader(self):
-        """Safely stop any running image loader."""
         if self.loader is None:
             return
         try:
@@ -442,25 +474,22 @@ class ResultsPage(QWidget):
         self.columns = 3
         self.is_loading = False
         self._active_workers = []
-        self._widget_cache = {}        # wall_id -> widget (for reuse)
-        self._widget_by_id = {}        # wall_id -> widget (currently in grid)
+        self._widget_cache = {}
+        self._widget_by_id = {}
         self._resize_timer = None
-        self._scroll_animation = None  # For smooth scrolling
+        self._scroll_animation = None
+
+        # Search cancellation / stale result prevention
+        self._current_search_worker = None
+        self._search_request_id = 0
+        self._current_filter_values = {}
 
         self.init_ui()
         self.init_overlay()
         self._setup_loading_bar_animation()
         self._setup_smooth_scrolling()
 
-    def ensure_filter_collapsed(self):
-        """Force the filter panel to be collapsed, updating UI accordingly."""
-        if self.filter_panel.isVisible():
-            self.filter_panel.animate_toggle(False)
-            self.filter_toggle_btn.setChecked(False)
-            self.filter_toggle_btn.setText("▼ Filters")
-
     def _setup_loading_bar_animation(self):
-        """Set up fade animation for the loading progress bar."""
         self.loading_opacity = QGraphicsOpacityEffect(self.loading_progress)
         self.loading_progress.setGraphicsEffect(self.loading_opacity)
         self.loading_opacity.setOpacity(0.0)
@@ -485,17 +514,15 @@ class ResultsPage(QWidget):
         self.loading_fade_anim.start()
 
     def _setup_smooth_scrolling(self):
-        """Install event filter on viewport to handle wheel events for smooth scrolling."""
         self.scroll_area.viewport().installEventFilter(self)
 
     def eventFilter(self, obj, event):
         if obj == self.scroll_area.viewport() and event.type() == QEvent.Wheel:
             self._handle_wheel_event(event)
-            return True  # Event handled
+            return True
         return super().eventFilter(obj, event)
 
     def _handle_wheel_event(self, event: QWheelEvent):
-        """Animate scrolling based on wheel delta."""
         scrollbar = self.scroll_area.verticalScrollBar()
         current_val = scrollbar.value()
         max_val = scrollbar.maximum()
@@ -633,17 +660,20 @@ class ResultsPage(QWidget):
         top_bar.addStretch()
         layout.addLayout(top_bar)
 
-        # Collapsible filter panel
+        # Filter panel
         self.filter_panel = AnimatedFilterPanel(self.extension)
-        self.filter_panel.filters_changed.connect(self.on_filters_changed)
+        self.filter_panel.apply_clicked.connect(self.on_apply_filters)
         self.filter_panel.setVisible(False)
         layout.addWidget(self.filter_panel)
 
-        # Results container (StackedWidget)
+        # Initialize filter values from panel defaults
+        self._current_filter_values = self.filter_panel.get_filter_values()
+
+        # Results container
         self.results_container = QStackedWidget()
         layout.addWidget(self.results_container)
 
-        # --- Scroll area with floating button ---
+        # Scroll area
         scroll_container = QWidget()
         scroll_layout = QVBoxLayout(scroll_container)
         scroll_layout.setContentsMargins(0, 0, 0, 0)
@@ -670,7 +700,6 @@ class ResultsPage(QWidget):
         self.scroll_area.setWidget(grid_container)
         scroll_layout.addWidget(self.scroll_area)
 
-        # Floating scroll-to-top button
         self.scroll_to_top_btn = QPushButton("↑")
         self.scroll_to_top_btn.setFixedSize(40, 40)
         self.scroll_to_top_btn.setStyleSheet("""
@@ -692,7 +721,7 @@ class ResultsPage(QWidget):
 
         self.results_container.addWidget(scroll_container)
 
-        # No results widget
+        # No results
         self.no_results_widget = QWidget()
         no_results_layout = QVBoxLayout(self.no_results_widget)
         no_results_layout.setAlignment(Qt.AlignCenter)
@@ -725,10 +754,7 @@ class ResultsPage(QWidget):
         """)
         layout.addWidget(self.loading_progress)
 
-        # Connect scroll signal
         self.scroll_area.verticalScrollBar().valueChanged.connect(self.on_scroll)
-
-        # Set up resize handling for button positioning
         scroll_container.resizeEvent = self._scroll_container_resize_event
 
     def _scroll_container_resize_event(self, event):
@@ -759,7 +785,7 @@ class ResultsPage(QWidget):
             self._resize_timer = QTimer(self)
             self._resize_timer.setSingleShot(True)
             self._resize_timer.timeout.connect(self._do_resize)
-        self._resize_timer.start(150)  # slightly longer debounce
+        self._resize_timer.start(150)
 
         QTimer.singleShot(0, self._position_scroll_button)
 
@@ -779,7 +805,10 @@ class ResultsPage(QWidget):
             self.filter_panel.animate_toggle(True)
             self.filter_toggle_btn.setText("▲ Filters")
 
-    def on_filters_changed(self):
+    def on_apply_filters(self, filter_values):
+        """Called when user clicks Apply in filter panel."""
+        self._current_filter_values = filter_values.copy()
+        self.filter_panel.set_apply_enabled(False)
         self.start_search(self.current_query)
 
     def update_columns_from_width(self):
@@ -840,8 +869,21 @@ class ResultsPage(QWidget):
 
         self._clear_grid()
 
-        filter_values = self.filter_panel.get_filter_values()
+        # Cancel any ongoing search worker
+        if self._current_search_worker is not None:
+            try:
+                self._current_search_worker.finished.disconnect()
+                self._current_search_worker.error.disconnect()
+            except Exception:
+                pass
+            if self._current_search_worker.isRunning():
+                self._current_search_worker.quit()
+                self._current_search_worker.wait(200)
+            self._current_search_worker.deleteLater()
+            self._current_search_worker = None
 
+        # Prepare filter values with download_folder for Local extension
+        filter_values = self._current_filter_values.copy()
         if self.extension.name == "Local":
             filter_values["download_folder"] = self.settings.download_folder
 
@@ -854,36 +896,47 @@ class ResultsPage(QWidget):
         self.is_loading = True
         self._fade_in_loading()
 
-        filter_values = self.filter_panel.get_filter_values()
-
+        filter_values = self._current_filter_values.copy()
         if self.extension.name == "Local":
             filter_values["download_folder"] = self.settings.download_folder
 
         self._start_search_worker(self.current_query, self.current_page + 1, filter_values)
 
     def _start_search_worker(self, query, page, filter_values):
-        worker = SearchWorker(
-            self.extension,
-            query,
-            page,
-            **filter_values
-        )
-        worker.finished.connect(self.on_search_finished)
-        worker.error.connect(self.on_search_error)
-        worker.finished.connect(lambda *args: self._remove_worker(worker))
-        worker.error.connect(lambda *args: self._remove_worker(worker))
+        self._search_request_id += 1
+        request_id = self._search_request_id
+
+        worker = SearchWorker(self.extension, query, page, **filter_values)
+        worker.finished.connect(lambda w, p, t, rid=request_id: self._on_search_finished_safe(w, p, t, rid))
+        worker.error.connect(lambda msg, rid=request_id: self._on_search_error_safe(msg, rid))
         worker.start()
+        self._current_search_worker = worker
         self._active_workers.append(worker)
+
+    def _on_search_finished_safe(self, wallpapers, page, total_pages, request_id):
+        if request_id != self._search_request_id:
+            return  # Stale result
+        self._current_search_worker = None
+        self.on_search_finished(wallpapers, page, total_pages)
+
+    def _on_search_error_safe(self, error_msg, request_id):
+        if request_id != self._search_request_id:
+            return
+        self._current_search_worker = None
+        self.on_search_error(error_msg)
 
     def _remove_worker(self, worker):
         if worker in self._active_workers:
             self._active_workers.remove(worker)
+        if worker == self._current_search_worker:
+            self._current_search_worker = None
         worker.deleteLater()
 
     def on_search_finished(self, wallpapers, page, total_pages):
         self.is_loading = False
         self._fade_out_loading()
         self.search_finished.emit()
+        self.filter_panel.set_apply_enabled(True)
 
         if page == 1:
             self.wallpapers = wallpapers
@@ -915,6 +968,7 @@ class ResultsPage(QWidget):
         self.is_loading = False
         self._fade_out_loading()
         self.search_finished.emit()
+        self.filter_panel.set_apply_enabled(True)
         QMessageBox.critical(self, "Search Error", error_msg)
 
     def show_no_results(self):
@@ -923,17 +977,14 @@ class ResultsPage(QWidget):
         self.results_container.setCurrentIndex(1)
 
     def _clear_grid(self):
-        """Remove all widgets from grid and clear tracking dicts."""
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.setParent(None)
         self._widget_by_id.clear()
-        # Keep cache for potential reuse
 
     def rebuild_grid(self):
-        """Full rebuild: clear and create/add widgets for all wallpapers."""
         self._clear_grid()
         if not self.wallpapers:
             return
@@ -953,25 +1004,18 @@ class ResultsPage(QWidget):
         self._trim_widget_cache()
 
     def relayout_grid(self):
-        """Efficient repositioning of existing widgets when column count changes."""
         if not self.wallpapers:
             return
 
-        # Build a mapping of wall_id to current widget (they're already in _widget_by_id)
-        # Remove all items from layout without deleting widgets
-        items = []
         while self.grid_layout.count():
-            item = self.grid_layout.takeAt(0)
-            items.append(item)
+            self.grid_layout.takeAt(0)
 
-        # Re-add widgets in correct positions
         for i, wp in enumerate(self.wallpapers):
             row = i // self.columns
             col = i % self.columns
             wall_id = self.extension.get_wallpaper_id(wp)
             widget = self._widget_by_id.get(wall_id)
             if widget is None:
-                # Should not happen, but fallback to creating
                 widget = self._get_or_create_widget(wp)
                 self._widget_by_id[wall_id] = widget
             self.grid_layout.addWidget(widget, row, col)
@@ -994,7 +1038,6 @@ class ResultsPage(QWidget):
         self.grid_layout.setRowStretch(row_count, 1)
 
     def _get_or_create_widget(self, wp_data):
-        """Get widget from cache or create new one."""
         wall_id = self.extension.get_wallpaper_id(wp_data)
         widget = self._widget_cache.pop(wall_id, None)
 
@@ -1015,7 +1058,6 @@ class ResultsPage(QWidget):
         return widget
 
     def _trim_widget_cache(self):
-        """Limit cache size to prevent memory bloat."""
         while len(self._widget_cache) > 50:
             _, widget = self._widget_cache.popitem()
             widget.deleteLater()
@@ -1097,7 +1139,8 @@ class ResultsPage(QWidget):
         self._widget_by_id.clear()
 
         self.filter_panel = AnimatedFilterPanel(self.extension)
-        self.filter_panel.filters_changed.connect(self.on_filters_changed)
+        self.filter_panel.apply_clicked.connect(self.on_apply_filters)
+        self.filter_panel.reset_last_applied()
         self.filter_panel.setVisible(self.filter_toggle_btn.isChecked())
         layout.insertWidget(1, self.filter_panel)
 
@@ -1107,8 +1150,16 @@ class ResultsPage(QWidget):
         if not has_filters:
             self.filter_panel.setVisible(False)
 
+        # Reset filter values to defaults from the new panel
+        self._current_filter_values = self.filter_panel.get_filter_values()
+
+    def ensure_filter_collapsed(self):
+        if self.filter_panel.isVisible():
+            self.filter_panel.animate_toggle(False)
+            self.filter_toggle_btn.setChecked(False)
+            self.filter_toggle_btn.setText("▼ Filters")
+
     def closeEvent(self, event):
-        """Clean up any running workers when the page is closed."""
         for worker in self._active_workers:
             if worker.isRunning():
                 worker.quit()
