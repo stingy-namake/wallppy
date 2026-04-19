@@ -8,7 +8,6 @@
   
   [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](https://github.com/stingy-namake/Wallppy)
   [![Python](https://img.shields.io/badge/python-3.11%2B-1E6FF0)](https://www.python.org/)
-  [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/stingy-namake/Wallppy/pulls)
   
   <br/>
