@@ -484,6 +484,11 @@ class ResultsPage(QWidget):
         self._search_request_id = 0
         self._current_filter_values = {}
 
+        # Download queue management
+        self._download_queue = []
+        self._current_download_worker = None
+        self._is_downloading = False
+
         self.init_ui()
         self.init_overlay()
         self._setup_loading_bar_animation()
@@ -497,21 +502,42 @@ class ResultsPage(QWidget):
         worker = self._current_search_worker
         self._current_search_worker = None
         
-        # Disconnect signals to prevent callbacks after cancellation
         try:
             worker.finished.disconnect()
             worker.error.disconnect()
         except (TypeError, RuntimeError):
             pass
         
-        # Request stop and wait
         if worker.isRunning():
             worker.quit()
-            if not worker.wait(500):  # Wait up to 500ms
-                worker.terminate()     # Force if needed
+            if not worker.wait(500):
+                worker.terminate()
                 worker.wait(100)
         
-        # Remove from active workers list
+        if worker in self._active_workers:
+            self._active_workers.remove(worker)
+        
+        worker.deleteLater()
+
+    def _cancel_current_download_worker(self):
+        """Safely cancel the current download worker."""
+        if self._current_download_worker is None:
+            return
+        
+        worker = self._current_download_worker
+        self._current_download_worker = None
+        self._is_downloading = False
+        
+        try:
+            worker.finished.disconnect()
+            worker.progress.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        
+        if worker.isRunning():
+            worker.quit()
+            worker.wait(200)
+        
         if worker in self._active_workers:
             self._active_workers.remove(worker)
         
@@ -523,6 +549,9 @@ class ResultsPage(QWidget):
             self._active_workers.remove(worker)
         if worker == self._current_search_worker:
             self._current_search_worker = None
+        if worker == self._current_download_worker:
+            self._current_download_worker = None
+            self._is_downloading = False
         worker.deleteLater()
 
     def _setup_loading_bar_animation(self):
@@ -957,6 +986,9 @@ class ResultsPage(QWidget):
             self._active_workers.remove(worker)
         if worker == self._current_search_worker:
             self._current_search_worker = None
+        if worker == self._current_download_worker:
+            self._current_download_worker = None
+            self._is_downloading = False
         worker.deleteLater()
 
     def on_search_finished(self, wallpapers, page, total_pages):
@@ -1090,23 +1122,77 @@ class ResultsPage(QWidget):
             widget.deleteLater()
 
     def download_wallpaper(self, wallpaper_data):
-        self.download_progress.emit(0)
-        self.dl_worker = DownloadWorker(self.extension, wallpaper_data, self.settings.download_folder)
-        self.dl_worker.finished.connect(self.on_download_finished)
-        self.dl_worker.progress.connect(self.download_progress.emit)
-        self.dl_worker.finished.connect(lambda *args: self._remove_worker(self.dl_worker))
-        self.dl_worker.start()
-        self._active_workers.append(self.dl_worker)
+        """Queue a wallpaper for download."""
+        self._download_queue.append(wallpaper_data)
+        self._process_download_queue()
 
-    def on_download_finished(self, success, filepath, filename, wall_id):
+    def _process_download_queue(self):
+        """Process the next item in the download queue."""
+        if self._is_downloading or not self._download_queue:
+            return
+        
+        wallpaper_data = self._download_queue.pop(0)
+        self._is_downloading = True
+        
+        # Update status with queue position
+        queue_size = len(self._download_queue)
+        filename = self.extension.get_wallpaper_id(wallpaper_data)
+        ext = self.extension.get_file_extension(wallpaper_data)
+        
+        if queue_size > 0:
+            status_msg = f"Downloading 1 of {queue_size + 1}: {filename}.{ext}"
+        else:
+            status_msg = f"Downloading: {filename}.{ext}"
+        
+        main_win = self.window()
+        if hasattr(main_win, 'status_bar'):
+            main_win.status_bar.showMessage(status_msg)
+        
+        self.download_progress.emit(0)
+        
+        worker = DownloadWorker(self.extension, wallpaper_data, self.settings.download_folder)
+        worker.finished.connect(self._on_download_finished_safe)
+        worker.progress.connect(self.download_progress.emit)
+        worker.start()
+        
+        self._current_download_worker = worker
+        self._active_workers.append(worker)
+
+    def _on_download_finished_safe(self, success, filepath, filename, wall_id):
+        """Handle download completion and process next in queue."""
+        self._is_downloading = False
+        self._current_download_worker = None
+        
         self.download_finished.emit(success, filepath, filename, wall_id)
+        
         if success:
+            # Update the widget that was downloaded
             for i in range(self.grid_layout.count()):
                 widget = self.grid_layout.itemAt(i).widget()
                 if isinstance(widget, WallpaperWidget):
                     if self.extension.get_wallpaper_id(widget.data) == wall_id:
                         widget.update_downloaded_status()
                         break
+            
+            # Show completion message
+            main_win = self.window()
+            if hasattr(main_win, 'status_bar'):
+                if self._download_queue:
+                    remaining = len(self._download_queue)
+                    main_win.status_bar.showMessage(f"Downloaded: {filename} ({remaining} remaining)")
+                else:
+                    main_win.status_bar.showMessage(f"Downloaded: {filename}")
+        else:
+            main_win = self.window()
+            if hasattr(main_win, 'status_bar'):
+                main_win.status_bar.showMessage(f"Download failed: {filename}")
+        
+        # Process next download
+        QTimer.singleShot(100, self._process_download_queue)
+
+    def on_download_finished(self, success, filepath, filename, wall_id):
+        """Kept for compatibility - actual handling is in _on_download_finished_safe."""
+        pass
 
     def expand_wallpaper(self, wallpaper_data):
         image_url = self.extension.get_download_url(wallpaper_data)
@@ -1188,11 +1274,15 @@ class ResultsPage(QWidget):
 
     def closeEvent(self, event):
         """Clean up any running workers when the page is closed."""
-        # Cancel search worker first
+        # Cancel workers
         self._cancel_current_search_worker()
+        self._cancel_current_download_worker()
+        
+        # Clear download queue
+        self._download_queue.clear()
         
         # Clean up remaining workers
-        for worker in self._active_workers[:]:  # Iterate over copy
+        for worker in self._active_workers[:]:
             if worker.isRunning():
                 worker.quit()
                 worker.wait(200)
