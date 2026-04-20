@@ -18,6 +18,18 @@ from .wallpaper_widget import WallpaperWidget
 THUMB_SIZE = QSize(280, 158)
 THUMB_PADDING = 12
 
+# Modern dark theme color palette - matching main_window.py
+COLOR_BG_PRIMARY = "#050508"
+COLOR_BG_SECONDARY = "#0a0a0c"
+COLOR_BG_TERTIARY = "#1e1e24"
+COLOR_ACCENT_PRIMARY = "#00d4ff"
+COLOR_ACCENT_SECONDARY = "#7b61ff"
+COLOR_TEXT_PRIMARY = "#ffffff"
+COLOR_TEXT_SECONDARY = "#a0a0b0"
+COLOR_TEXT_MUTED = "#6a6a7a"
+COLOR_BORDER = "#2a2a35"
+COLOR_BORDER_HOVER = "#3a3a4a"
+
 NO_RESULTS_MESSAGES = [
     "Nothing here... Maybe it's in another world?",
     "This search result is a lie.",
@@ -32,20 +44,21 @@ NO_RESULTS_MESSAGES = [
 
 class AnimatedFilterPanel(QFrame):
     """Collapsible panel with smooth expand/collapse animation, scrollable content, and Apply button."""
-    apply_clicked = pyqtSignal(dict)  # Emits the filter values
+    apply_clicked = pyqtSignal(dict)
 
     def __init__(self, extension: WallpaperExtension, parent=None):
         super().__init__(parent)
         self.extension = extension
         self.widgets = {}
-        self._last_applied_values = None  # Track last applied filters
+        self._last_applied_values = None
         self.setFrameShape(QFrame.StyledPanel)
-        self.setStyleSheet("""
-            AnimatedFilterPanel {
-                background-color: #2a2a2f;
-                border-radius: 6px;
+        self.setStyleSheet(f"""
+            AnimatedFilterPanel {{
+                background-color: {COLOR_BG_TERTIARY};
+                border-radius: 12px;
+                border: 1px solid {COLOR_BORDER};
                 padding: 0px;
-            }
+            }}
         """)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.init_ui()
@@ -61,25 +74,25 @@ class AnimatedFilterPanel(QFrame):
         self.scroll_area.setFrameShape(QFrame.NoFrame)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.scroll_area.setStyleSheet("""
-            QScrollArea {
+        self.scroll_area.setStyleSheet(f"""
+            QScrollArea {{
                 background-color: transparent;
                 border: none;
-            }
-            QScrollBar:vertical {
-                background: #2a2a2f;
+            }}
+            QScrollBar:vertical {{
+                background: {COLOR_BG_TERTIARY};
                 width: 8px;
                 border-radius: 4px;
-            }
-            QScrollBar::handle:vertical {
-                background: #555;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {COLOR_BORDER};
                 border-radius: 4px;
                 min-height: 20px;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 border: none;
                 background: none;
-            }
+            }}
         """)
         self.scroll_area.setMaximumHeight(400)
 
@@ -103,7 +116,7 @@ class AnimatedFilterPanel(QFrame):
             group_layout.setSpacing(6)
 
             cat_label = QLabel(label)
-            cat_label.setStyleSheet("color: #aaa; font-size: 13px; font-weight: bold;")
+            cat_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 13px; font-weight: bold; background: transparent; border: none;")
             group_layout.addWidget(cat_label)
 
             if filter_type == "checkboxes":
@@ -115,7 +128,7 @@ class AnimatedFilterPanel(QFrame):
                 for opt in options:
                     cb = QCheckBox(opt["label"])
                     cb.setChecked(opt.get("default", False))
-                    cb.setStyleSheet("color: white;")
+                    cb.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; background: transparent; border: none;")
                     cb_layout.addWidget(cb)
                     key = f"{filter_id}.{opt['id']}"
                     self.widgets[key] = cb
@@ -125,24 +138,31 @@ class AnimatedFilterPanel(QFrame):
 
             elif filter_type == "dropdown":
                 combo = QComboBox()
-                combo.setStyleSheet("""
-                    QComboBox {
-                        background-color: #3a3a40;
-                        border: 1px solid #4a4a50;
-                        border-radius: 4px;
-                        padding: 6px;
-                        color: white;
+                combo.setStyleSheet(f"""
+                    QComboBox {{
+                        background-color: {COLOR_BG_SECONDARY};
+                        border: 1px solid {COLOR_BORDER};
+                        border-radius: 8px;
+                        padding: 6px 12px;
+                        color: {COLOR_TEXT_PRIMARY};
                         min-width: 150px;
-                    }
-                    QComboBox::drop-down {
+                    }}
+                    QComboBox:hover {{
+                        border-color: {COLOR_BORDER_HOVER};
+                    }}
+                    QComboBox::drop-down {{
                         border: none;
-                        width: 20px;
-                    }
-                    QComboBox QAbstractItemView {
-                        background-color: #3a3a40;
-                        color: white;
-                        selection-background-color: #1E6FF0;
-                    }
+                        width: 24px;
+                    }}
+                    QComboBox QAbstractItemView {{
+                        background-color: {COLOR_BG_TERTIARY};
+                        color: {COLOR_TEXT_PRIMARY};
+                        border: 1px solid {COLOR_BORDER};
+                        border-radius: 8px;
+                        selection-background-color: {COLOR_ACCENT_PRIMARY};
+                        selection-color: {COLOR_BG_PRIMARY};
+                        padding: 4px;
+                    }}
                 """)
 
                 default_index = 0
@@ -159,25 +179,27 @@ class AnimatedFilterPanel(QFrame):
 
         # Apply button
         self.apply_btn = QPushButton("Apply Filters")
-        self.apply_btn.setFixedHeight(32)
-        self.apply_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1E6FF0;
-                color: white;
-                border-radius: 4px;
+        self.apply_btn.setFixedHeight(36)
+        self.apply_btn.setCursor(Qt.PointingHandCursor)
+        self.apply_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT_PRIMARY};
+                color: {COLOR_BG_PRIMARY};
+                border-radius: 8px;
                 font-size: 13px;
+                font-weight: 600;
                 border: none;
-            }
-            QPushButton:hover {
-                background-color: #3D82F5;
-            }
-            QPushButton:pressed {
-                background-color: #1558C4;
-            }
-            QPushButton:disabled {
-                background-color: #555;
-                color: #999;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: #33ddff;
+            }}
+            QPushButton:pressed {{
+                background-color: #00a8cc;
+            }}
+            QPushButton:disabled {{
+                background-color: {COLOR_BORDER};
+                color: {COLOR_TEXT_MUTED};
+            }}
         """)
         self.apply_btn.clicked.connect(self._on_apply_clicked)
         main_layout.addWidget(self.apply_btn)
@@ -239,7 +261,7 @@ class AnimatedFilterPanel(QFrame):
         self.apply_btn.setEnabled(enabled)
 
     def reset_last_applied(self):
-        """Clear the last applied values (useful when extension changes)."""
+        """Clear the last applied values."""
         self._last_applied_values = None
 
     def animate_toggle(self, expand):
@@ -249,7 +271,7 @@ class AnimatedFilterPanel(QFrame):
         if expand:
             self.setVisible(True)
             self._animation = QPropertyAnimation(self, b"maximumHeight")
-            self._animation.setDuration(200)
+            self._animation.setDuration(250)
             self._animation.setStartValue(0)
             content_height = self.scroll_area.widget().sizeHint().height() + 24
             target_height = min(content_height, 400)
@@ -258,7 +280,7 @@ class AnimatedFilterPanel(QFrame):
             self._animation.start()
         else:
             self._animation = QPropertyAnimation(self, b"maximumHeight")
-            self._animation.setDuration(150)
+            self._animation.setDuration(200)
             self._animation.setStartValue(self.height())
             self._animation.setEndValue(0)
             self._animation.setEasingCurve(QEasingCurve.InCubic)
@@ -320,7 +342,7 @@ class ImageOverlay(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("background-color: rgba(0, 0, 0, 0.92);")
+        self.setStyleSheet(f"background-color: rgba(15, 15, 18, 0.95);")
         self.setVisible(False)
         self.loader = None
 
@@ -330,12 +352,12 @@ class ImageOverlay(QWidget):
 
         self.loading_card = QFrame()
         self.loading_card.setFixedSize(220, 120)
-        self.loading_card.setStyleSheet("""
-            QFrame {
-                background-color: rgba(25, 25, 25, 0.95);
-                border-radius: 14px;
-                border: 1px solid rgba(255, 255, 255, 0.06);
-            }
+        self.loading_card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLOR_BG_TERTIARY};
+                border-radius: 16px;
+                border: 1px solid {COLOR_BORDER};
+            }}
         """)
         card_layout = QVBoxLayout(self.loading_card)
         card_layout.setAlignment(Qt.AlignCenter)
@@ -344,26 +366,28 @@ class ImageOverlay(QWidget):
 
         self.spinner = QLabel("⟳")
         self.spinner.setAlignment(Qt.AlignCenter)
-        self.spinner.setStyleSheet("""
-            QLabel {
-                color: #1E6FF0;
+        self.spinner.setStyleSheet(f"""
+            QLabel {{
+                color: {COLOR_ACCENT_PRIMARY};
                 font-size: 28px;
                 background: transparent;
                 font-weight: bold;
-            }
+                border: none;
+            }}
         """)
         card_layout.addWidget(self.spinner)
 
         self.loading_text = QLabel("Loading image")
         self.loading_text.setAlignment(Qt.AlignCenter)
-        self.loading_text.setStyleSheet("""
-            QLabel {
-                color: #e0e0e0;
+        self.loading_text.setStyleSheet(f"""
+            QLabel {{
+                color: {COLOR_TEXT_SECONDARY};
                 font-size: 14px;
                 font-weight: 500;
                 letter-spacing: 0.8px;
                 background: transparent;
-            }
+                border: none;
+            }}
         """)
         card_layout.addWidget(self.loading_text)
 
@@ -377,12 +401,13 @@ class ImageOverlay(QWidget):
 
         self.hint = QLabel("Press ESC or click to close")
         self.hint.setAlignment(Qt.AlignCenter)
-        self.hint.setStyleSheet("""
-            color: #666;
+        self.hint.setStyleSheet(f"""
+            color: {COLOR_TEXT_MUTED};
             font-size: 11px;
             background: transparent;
             padding: 12px;
             letter-spacing: 0.5px;
+            border: none;
         """)
         layout.addWidget(self.hint, alignment=Qt.AlignCenter)
 
@@ -561,7 +586,7 @@ class ResultsPage(QWidget):
         self.loading_progress.setVisible(True)
 
         self.loading_fade_anim = QPropertyAnimation(self.loading_opacity, b"opacity")
-        self.loading_fade_anim.setDuration(200)
+        self.loading_fade_anim.setDuration(250)
         self.loading_fade_anim.setEasingCurve(QEasingCurve.InOutCubic)
 
     def _fade_in_loading(self):
@@ -625,17 +650,20 @@ class ResultsPage(QWidget):
         self.home_btn = QPushButton("⌂")
         self.home_btn.setToolTip("Back to home")
         self.home_btn.setFixedSize(36, 36)
-        self.home_btn.setStyleSheet("""
-            QPushButton {
+        self.home_btn.setCursor(Qt.PointingHandCursor)
+        self.home_btn.setStyleSheet(f"""
+            QPushButton {{
                 background-color: transparent;
-                border: 1px solid #3d3d3d;
+                border: 1px solid {COLOR_BORDER};
                 border-radius: 18px;
                 font-size: 20px;
+                color: {COLOR_TEXT_PRIMARY};
                 padding: 0px;
-            }
-            QPushButton:hover {
-                background-color: #3d3d3d;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {COLOR_BORDER_HOVER};
+                border-color: {COLOR_ACCENT_PRIMARY};
+            }}
         """)
         self.home_btn.clicked.connect(self.home_requested.emit)
         top_bar.addWidget(self.home_btn)
@@ -652,19 +680,23 @@ class ResultsPage(QWidget):
 
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search wallpapers...")
-        self.search_edit.setFixedHeight(32)
-        self.search_edit.setStyleSheet("""
-            QLineEdit {
+        self.search_edit.setFixedHeight(36)
+        self.search_edit.setStyleSheet(f"""
+            QLineEdit {{
                 font-size: 14px;
                 padding: 0px 12px;
-                border-radius: 4px;
-                background-color: #2d2d2d;
-                border: 1px solid #3d3d3d;
-                color: white;
-            }
-            QLineEdit:focus {
-                border: 1px solid #1E6FF0;
-            }
+                border-radius: 8px;
+                background-color: {COLOR_BG_TERTIARY};
+                border: 1px solid {COLOR_BORDER};
+                color: {COLOR_TEXT_PRIMARY};
+                selection-background-color: {COLOR_ACCENT_PRIMARY};
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {COLOR_ACCENT_PRIMARY};
+            }}
+            QLineEdit:hover:!focus {{
+                border-color: {COLOR_BORDER_HOVER};
+            }}
         """)
         self.search_edit.returnPressed.connect(self.emit_search)
         search_layout.addWidget(self.search_edit, 3)
@@ -674,50 +706,59 @@ class ResultsPage(QWidget):
         self.filter_toggle_btn.setToolTip("Show/hide filters")
         self.filter_toggle_btn.setCheckable(True)
         self.filter_toggle_btn.setChecked(False)
-        self.filter_toggle_btn.setFixedSize(100, 32)
-        self.filter_toggle_btn.setStyleSheet("""
-            QToolButton {
-                background-color: #3d3d3d;
-                border-radius: 4px;
+        self.filter_toggle_btn.setFixedSize(100, 36)
+        self.filter_toggle_btn.setCursor(Qt.PointingHandCursor)
+        self.filter_toggle_btn.setStyleSheet(f"""
+            QToolButton {{
+                background-color: {COLOR_BG_TERTIARY};
+                border-radius: 8px;
                 padding: 0px 12px;
                 min-height: 30px;
-                color: white;
-                border: 1px solid #4d4d4d;
+                color: {COLOR_TEXT_PRIMARY};
+                border: 1px solid {COLOR_BORDER};
                 font-size: 13px;
-            }
-            QToolButton:hover {
-                background-color: #4d4d4d;
-            }
-            QToolButton:checked {
-                background-color: #1E6FF0;
-            }
-            QToolButton:disabled {
-                background-color: #2d2d2d;
-                color: #666;
-                border-color: #3d3d3d;
-            }
+                font-weight: 500;
+            }}
+            QToolButton:hover {{
+                background-color: {COLOR_BORDER_HOVER};
+                border-color: {COLOR_ACCENT_PRIMARY};
+            }}
+            QToolButton:checked {{
+                background-color: {COLOR_ACCENT_PRIMARY};
+                color: {COLOR_BG_PRIMARY};
+                border-color: {COLOR_ACCENT_PRIMARY};
+                font-weight: 600;
+            }}
+            QToolButton:disabled {{
+                background-color: {COLOR_BG_SECONDARY};
+                color: {COLOR_TEXT_MUTED};
+                border-color: {COLOR_BORDER};
+            }}
         """)
         self.filter_toggle_btn.clicked.connect(self.toggle_filter_panel)
         search_layout.addWidget(self.filter_toggle_btn)
 
         self.search_btn = QPushButton("Search")
-        self.search_btn.setFixedSize(100, 32)
+        self.search_btn.setFixedSize(100, 36)
+        self.search_btn.setCursor(Qt.PointingHandCursor)
         self.search_btn.clicked.connect(self.emit_search)
-        self.search_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1E6FF0;
-                color: white;
-                border-radius: 4px;
+        self.search_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT_PRIMARY};
+                color: {COLOR_BG_PRIMARY};
+                border-radius: 8px;
                 padding: 0px 16px;
                 min-height: 30px;
                 font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #3D82F5;
-            }
-            QPushButton:pressed {
-                background-color: #1558C4;
-            }
+                font-weight: 600;
+                border: none;
+            }}
+            QPushButton:hover {{
+                background-color: #33ddff;
+            }}
+            QPushButton:pressed {{
+                background-color: #00a8cc;
+            }}
         """)
         search_layout.addWidget(self.search_btn)
 
@@ -749,6 +790,12 @@ class ResultsPage(QWidget):
         self.scroll_area.setFrameShape(QFrame.NoFrame)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                border: none;
+                background: transparent;
+            }}
+        """)
 
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
@@ -767,19 +814,20 @@ class ResultsPage(QWidget):
 
         self.scroll_to_top_btn = QPushButton("↑")
         self.scroll_to_top_btn.setFixedSize(40, 40)
-        self.scroll_to_top_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(30, 111, 240, 0.9);
-                border-radius: 20px;
-                color: white;
-                font-size: 20px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #3D82F5;
-            }
-        """)
         self.scroll_to_top_btn.setCursor(Qt.PointingHandCursor)
+        self.scroll_to_top_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT_PRIMARY};
+                border-radius: 20px;
+                color: {COLOR_BG_PRIMARY};
+                font-size: 20px;
+                font-weight: bold;
+                border: none;
+            }}
+            QPushButton:hover {{
+                background-color: #33ddff;
+            }}
+        """)
         self.scroll_to_top_btn.clicked.connect(self.scroll_to_top)
         self.scroll_to_top_btn.setParent(scroll_container)
         self.scroll_to_top_btn.hide()
@@ -792,7 +840,13 @@ class ResultsPage(QWidget):
         no_results_layout.setAlignment(Qt.AlignCenter)
         self.no_results_label = QLabel()
         self.no_results_label.setAlignment(Qt.AlignCenter)
-        self.no_results_label.setStyleSheet("color: #aaa; font-size: 18px; padding: 40px;")
+        self.no_results_label.setStyleSheet(f"""
+            color: {COLOR_TEXT_SECONDARY}; 
+            font-size: 18px; 
+            padding: 40px;
+            background: transparent;
+            border: none;
+        """)
         self.no_results_label.setWordWrap(True)
         no_results_layout.addWidget(self.no_results_label)
         self.results_container.addWidget(self.no_results_widget)
@@ -803,19 +857,19 @@ class ResultsPage(QWidget):
         self.loading_progress.setRange(0, 0)
         self.loading_progress.setTextVisible(False)
         self.loading_progress.setMaximumHeight(3)
-        self.loading_progress.setStyleSheet("""
-            QProgressBar {
-                background-color: #1e1e1e;
+        self.loading_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {COLOR_BG_PRIMARY};
                 border: none;
-                border-radius: 2px;
+                border-radius: 1px;
                 max-height: 3px;
                 min-height: 3px;
-            }
-            QProgressBar::chunk {
+            }}
+            QProgressBar::chunk {{
                 background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 #1558C4, stop:0.5 #1E6FF0, stop:1 #3D82F5);
-                border-radius: 2px;
-            }
+                    stop:0 {COLOR_ACCENT_SECONDARY}, stop:0.5 {COLOR_ACCENT_PRIMARY}, stop:1 {COLOR_ACCENT_SECONDARY});
+                border-radius: 1px;
+            }}
         """)
         layout.addWidget(self.loading_progress)
 
@@ -972,7 +1026,7 @@ class ResultsPage(QWidget):
 
     def _on_search_finished_safe(self, wallpapers, page, total_pages, request_id):
         if request_id != self._search_request_id:
-            return  # Stale result
+            return
         self.on_search_finished(wallpapers, page, total_pages)
 
     def _on_search_error_safe(self, error_msg, request_id):
@@ -981,7 +1035,7 @@ class ResultsPage(QWidget):
         self.on_search_error(error_msg)
 
     def _remove_worker(self, worker):
-        """General worker removal (for download workers, etc.)."""
+        """General worker removal."""
         if worker in self._active_workers:
             self._active_workers.remove(worker)
         if worker == self._current_search_worker:
@@ -1134,7 +1188,6 @@ class ResultsPage(QWidget):
         wallpaper_data = self._download_queue.pop(0)
         self._is_downloading = True
         
-        # Update status with queue position
         queue_size = len(self._download_queue)
         filename = self.extension.get_wallpaper_id(wallpaper_data)
         ext = self.extension.get_file_extension(wallpaper_data)
@@ -1166,7 +1219,6 @@ class ResultsPage(QWidget):
         self.download_finished.emit(success, filepath, filename, wall_id)
         
         if success:
-            # Update the widget that was downloaded
             for i in range(self.grid_layout.count()):
                 widget = self.grid_layout.itemAt(i).widget()
                 if isinstance(widget, WallpaperWidget):
@@ -1174,7 +1226,6 @@ class ResultsPage(QWidget):
                         widget.update_downloaded_status()
                         break
             
-            # Show completion message
             main_win = self.window()
             if hasattr(main_win, 'status_bar'):
                 if self._download_queue:
@@ -1187,11 +1238,10 @@ class ResultsPage(QWidget):
             if hasattr(main_win, 'status_bar'):
                 main_win.status_bar.showMessage(f"Download failed: {filename}")
         
-        # Process next download
         QTimer.singleShot(100, self._process_download_queue)
 
     def on_download_finished(self, success, filepath, filename, wall_id):
-        """Kept for compatibility - actual handling is in _on_download_finished_safe."""
+        """Kept for compatibility."""
         pass
 
     def expand_wallpaper(self, wallpaper_data):
@@ -1210,7 +1260,6 @@ class ResultsPage(QWidget):
         if hasattr(main_win, 'status_bar'):
             main_win.status_bar.showMessage("Setting wallpaper...")
 
-        # Disable all wallpaper buttons during the operation
         for i in range(self.grid_layout.count()):
             widget = self.grid_layout.itemAt(i).widget()
             if isinstance(widget, WallpaperWidget):
@@ -1226,7 +1275,6 @@ class ResultsPage(QWidget):
         self.wallpaper_worker.start()
         self._active_workers.append(self.wallpaper_worker)
 
-
     def _on_wallpaper_set_complete(self, success, message):
         """Handle wallpaper set completion for all widgets."""
         main_win = self.window()
@@ -1236,16 +1284,13 @@ class ResultsPage(QWidget):
             else:
                 main_win.status_bar.showMessage(f"Failed to set wallpaper: {message}")
 
-        # Re-enable all buttons and refresh active indicators
         for i in range(self.grid_layout.count()):
             widget = self.grid_layout.itemAt(i).widget()
             if isinstance(widget, WallpaperWidget):
                 widget.on_wallpaper_set_complete(success)
 
-
-    # Remove the old on_wallpaper_set method or keep it for compatibility
     def on_wallpaper_set(self, success, message):
-        """Kept for compatibility - use _on_wallpaper_set_complete instead."""
+        """Kept for compatibility."""
         self._on_wallpaper_set_complete(success, message)
 
     def update_extension(self, new_extension: WallpaperExtension):
@@ -1272,7 +1317,6 @@ class ResultsPage(QWidget):
         if not has_filters:
             self.filter_panel.setVisible(False)
 
-        # Reset filter values to defaults from the new panel
         self._current_filter_values = self.filter_panel.get_filter_values()
 
     def ensure_filter_collapsed(self):
@@ -1283,14 +1327,11 @@ class ResultsPage(QWidget):
 
     def closeEvent(self, event):
         """Clean up any running workers when the page is closed."""
-        # Cancel workers
         self._cancel_current_search_worker()
         self._cancel_current_download_worker()
         
-        # Clear download queue
         self._download_queue.clear()
         
-        # Clean up remaining workers
         for worker in self._active_workers[:]:
             if worker.isRunning():
                 worker.quit()

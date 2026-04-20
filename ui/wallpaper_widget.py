@@ -11,6 +11,18 @@ from core.workers import ThumbnailLoader
 
 THUMB_SIZE = QSize(280, 158)
 
+# Modern dark theme color palette - matching main_window.py
+COLOR_BG_PRIMARY = "#050508"
+COLOR_BG_SECONDARY = "#0a0a0c"
+COLOR_BG_TERTIARY = "#1e1e24"
+COLOR_ACCENT_PRIMARY = "#00d4ff"
+COLOR_ACCENT_SECONDARY = "#7b61ff"
+COLOR_TEXT_PRIMARY = "#ffffff"
+COLOR_TEXT_SECONDARY = "#a0a0b0"
+COLOR_TEXT_MUTED = "#6a6a7a"
+COLOR_BORDER = "#2a2a35"
+COLOR_BORDER_HOVER = "#3a3a4a"
+
 
 class ShimmerLabel(QLabel):
     """Label with animated shimmer effect while loading."""
@@ -21,8 +33,8 @@ class ShimmerLabel(QLabel):
         self.setScaledContents(True)
         self._shimmer_anim = None
         self._shimmer_value = 0.0
-        self._base_color = QColor(45, 45, 50)
-        self._highlight = QColor(70, 70, 80)
+        self._base_color = QColor(30, 30, 36)
+        self._highlight = QColor(50, 50, 60)
 
     def paintEvent(self, event):
         if self.pixmap() and not self.pixmap().isNull():
@@ -33,7 +45,7 @@ class ShimmerLabel(QLabel):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         painter.setBrush(self._base_color)
-        painter.drawRoundedRect(self.rect(), 6, 6)
+        painter.drawRoundedRect(self.rect(), 8, 8)
 
         gradient = QLinearGradient(0, 0, self.width(), 0)
         pos = self._shimmer_value
@@ -41,7 +53,7 @@ class ShimmerLabel(QLabel):
         gradient.setColorAt(pos, self._highlight)
         gradient.setColorAt(min(1, pos + 0.3), self._base_color)
         painter.setBrush(QBrush(gradient))
-        painter.drawRoundedRect(self.rect(), 6, 6)
+        painter.drawRoundedRect(self.rect(), 8, 8)
 
     def start_shimmer(self):
         if self._shimmer_anim:
@@ -83,20 +95,19 @@ class WallpaperWidget(QFrame):
         self.thumb_url = extension.get_thumbnail_url(wallpaper_data)
         self._thumb_loader = None
         self._loaded = False
-        self._is_setting_wallpaper = False  # Track if wallpaper is being set
+        self._is_setting_wallpaper = False
 
         self.setFrameShape(QFrame.StyledPanel)
-        self.setStyleSheet("""
-            WallpaperWidget {
-                background-color: #2a2a2f;
-                border-radius: 10px;
-                border: 1px solid #3a3a40;
-            }
-            WallpaperWidget:hover {
-                background-color: #323238;
-                border-color: #4a4a50;
-                opacity: 0.95;
-            }
+        self.setStyleSheet(f"""
+            WallpaperWidget {{
+                background-color: {COLOR_BG_TERTIARY};
+                border-radius: 12px;
+                border: 1px solid {COLOR_BORDER};
+            }}
+            WallpaperWidget:hover {{
+                background-color: {COLOR_BORDER_HOVER};
+                border-color: {COLOR_ACCENT_PRIMARY};
+            }}
         """)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.init_ui()
@@ -109,15 +120,15 @@ class WallpaperWidget(QFrame):
 
         self.thumb_label = ShimmerLabel()
         self.thumb_label.setAlignment(Qt.AlignCenter)
-        self.thumb_label.setStyleSheet("""
-            QLabel {
-                background-color: #1e1e22;
+        self.thumb_label.setStyleSheet(f"""
+            QLabel {{
+                background-color: {COLOR_BG_PRIMARY};
                 border-radius: 8px;
-                border: 1px solid #2a2a2f;
-            }
-            QLabel:hover {
-                border: 2px solid #1E6FF0;
-            }
+                border: 1px solid {COLOR_BORDER};
+            }}
+            QLabel:hover {{
+                border: 2px solid {COLOR_ACCENT_PRIMARY};
+            }}
         """)
         self.thumb_label.setCursor(Qt.PointingHandCursor)
         self.thumb_label.start_shimmer()
@@ -131,16 +142,16 @@ class WallpaperWidget(QFrame):
         self.active_indicator = QToolButton()
         self.active_indicator.setText("★")
         self.active_indicator.setToolTip("Current wallpaper")
-        self.active_indicator.setStyleSheet("""
-            QToolButton {
-                background-color: #1E6FF0;
-                border-radius: 4px;
+        self.active_indicator.setStyleSheet(f"""
+            QToolButton {{
+                background-color: {COLOR_ACCENT_PRIMARY};
+                border-radius: 6px;
                 border: none;
-                color: white;
+                color: {COLOR_BG_PRIMARY};
                 font-size: 12px;
                 padding: 6px 0px;
                 font-weight: bold;
-            }
+            }}
         """)
         self.active_indicator.setFixedSize(36, 30)
         self.active_indicator.hide()
@@ -153,7 +164,7 @@ class WallpaperWidget(QFrame):
         self.checkmark_btn.setStyleSheet("""
             QToolButton {
                 background-color: #2ea043;
-                border-radius: 4px;
+                border-radius: 6px;
                 border: none;
                 color: white;
                 font-size: 12px;
@@ -167,27 +178,28 @@ class WallpaperWidget(QFrame):
 
         res = self.extension.get_resolution(self.data)
         self.res_label = QLabel(res)
-        self.res_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        self.res_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 12px; background: transparent; border: none;")
         bottom_layout.addWidget(self.res_label)
 
         bottom_layout.addStretch()
 
-        BUTTON_STYLE = """
-            QToolButton {
-                background-color: rgba(60, 60, 65, 0.9);
+        BUTTON_STYLE = f"""
+            QToolButton {{
+                background-color: rgba(58, 58, 68, 0.9);
                 border-radius: 6px;
-                border: none;
-                color: white;
+                border: 1px solid {COLOR_BORDER};
+                color: {COLOR_TEXT_PRIMARY};
                 font-size: 14px;
                 padding: 6px 0px;
-            }
-            QToolButton:hover {
-                background-color: rgba(80, 80, 85, 1);
-            }
-            QToolButton:disabled {
+            }}
+            QToolButton:hover {{
+                background-color: {COLOR_BORDER_HOVER};
+                border-color: {COLOR_ACCENT_PRIMARY};
+            }}
+            QToolButton:disabled {{
                 background-color: rgba(40, 40, 45, 0.7);
-                color: #888;
-            }
+                color: {COLOR_TEXT_MUTED};
+            }}
         """
 
         self.expand_btn = QToolButton()
@@ -215,14 +227,13 @@ class WallpaperWidget(QFrame):
     def _on_set_wallpaper_clicked(self):
         """Handle set wallpaper click with spam prevention."""
         if self._is_setting_wallpaper:
-            return  # Already setting, ignore
+            return
         
         self._is_setting_wallpaper = True
         self.wallpaper_btn.setEnabled(False)
         self.wallpaper_btn.setText("⏳")
         self.wallpaper_btn.setToolTip("Setting wallpaper...")
         
-        # Emit the signal
         self.set_wallpaper_triggered.emit(self.data)
 
     def on_wallpaper_set_complete(self, success: bool):
