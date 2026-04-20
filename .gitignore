@@ -214,3 +214,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Other files to ignore
+*.log
+*.tmp
+tempCodeRunnerFile.py
+__pycache__/
