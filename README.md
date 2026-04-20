@@ -12,7 +12,7 @@
   
   <br/>
   
-  <!-- <img src="https://raw.githubusercontent.com/stingy-namake/Wallppy/main/assets/screenshot.png" alt="Wallppy screenshot" width="800"/> -->
+<img src="https://github.com/user-attachments/assets/71722e19-2f3b-482b-8a08-68d605e0bab8" width="800"/>
   
 </div>
 
@@ -29,6 +29,7 @@
 - 📥 **Batch downloads** - Queue multiple wallpapers for download
 - 🖥️ **One-click apply** - Set any wallpaper as your desktop background instantly
 
+<img src="https://github.com/user-attachments/assets/e11be814-71bc-4c12-bc72-3d77b9c94da8" width="800"/>
 ---
 
 ## 📦 Supported Sources
