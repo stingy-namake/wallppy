@@ -679,7 +679,7 @@ class ResultsPage(QWidget):
         top_bar.addWidget(self.home_btn)
 
 # ── Search bar ────────────────────────────────────────────────────
-        # Container com fundo semitransparente, borda sutil e ícone SVG inline
+        # Container with semi-transparent background, subtle border and inline SVG icon
         search_container = QFrame()
         search_container.setFixedHeight(40)
         search_container.setStyleSheet(f"""
@@ -698,7 +698,7 @@ class ResultsPage(QWidget):
         search_layout.setContentsMargins(12, 0, 6, 0)
         search_layout.setSpacing(8)
 
-        # Ícone SVG embutido — lupa moderna com stroke fino
+        # SVG magnifying glass icon for search — thin stroke, centered
         search_icon = QLabel()
         search_icon.setFixedSize(16, 16)
         search_icon.setStyleSheet("background: transparent; border: none;")
@@ -715,7 +715,7 @@ class ResultsPage(QWidget):
 
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search wallpapers...")
-        self.search_edit.setFrame(False)          # sem borda própria — o container já tem
+        self.search_edit.setFrame(False)         
         self.search_edit.setStyleSheet(f"""
             QLineEdit {{
                 font-size: 13px;
@@ -762,7 +762,6 @@ class ResultsPage(QWidget):
         self.search_btn.setFixedSize(100, 36)
         self.search_btn.setCursor(Qt.PointingHandCursor)
         self.search_btn.clicked.connect(self.emit_search)
-        # Troque o stylesheet do search_btn por:
         self.search_btn.setStyleSheet(f"""
             AnimatedToolButton {{
                 background-color: {COLOR_ACCENT_PRIMARY};
@@ -781,8 +780,8 @@ class ResultsPage(QWidget):
         """)
 
         top_bar.addWidget(search_container, 3)
-        top_bar.addWidget(self.filter_toggle_btn)  # ← aqui
-        top_bar.addWidget(self.search_btn)         # ← aqui
+        top_bar.addWidget(self.filter_toggle_btn)  
+        top_bar.addWidget(self.search_btn)       
         top_bar.addStretch()
         layout.addLayout(top_bar)
 

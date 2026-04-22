@@ -18,8 +18,8 @@ from core.extension import get_extension_names
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# HoverScaleEffect — reutilizado da wallpaper_widget, sem glow (no_glow=True)
-# para elementos da landing page onde só o zoom importa
+# HoverScaleEffect — reused from wallpaper_widget, without glow (no_glow=True)
+# for landing page elements where only zoom matters
 # ─────────────────────────────────────────────────────────────────────────────
 class HoverScaleEffect(QGraphicsEffect):
     def __init__(self, radius=10.0, no_glow=False, parent=None):
@@ -82,7 +82,7 @@ class HoverScaleEffect(QGraphicsEffect):
 
 
 class AnimatedButton(QPushButton):
-    """QPushButton com zoom suave no hover."""
+    """QPushButton with subtle hover animation."""
     def __init__(self, *args, no_glow=True, radius=8.0, **kwargs):
         super().__init__(*args, **kwargs)
         self.setAttribute(Qt.WA_Hover, True)
@@ -118,7 +118,7 @@ class AnimatedButton(QPushButton):
 
 
 class AnimatedComboBox(QComboBox):
-    """QComboBox com zoom suave no hover."""
+    """QComboBox with subtle hover animation."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setAttribute(Qt.WA_Hover, True)
@@ -148,14 +148,14 @@ class AnimatedComboBox(QComboBox):
 # ============================================================
 class LandingPage(QWidget):
     """
-    Landing page premium — dark, minimal, com zoom nos elementos interativos.
+    Premium landing page — dark, minimal, with zoom on interactive elements.
     """
 
     COLOR_BG_PRIMARY    = "#050508"
     COLOR_BG_SECONDARY  = "#0a0a0f"
     COLOR_BG_TERTIARY   = "#111118"
     COLOR_BG_CARD       = "#0d0d14"
-    COLOR_ACCENT        = "#00d4ff"   # cyan — igual ao Search
+    COLOR_ACCENT        = "#00d4ff"  
     COLOR_ACCENT_DIM    = "#00d4ff22"
     COLOR_TEXT_PRIMARY  = "#eeeef5"
     COLOR_TEXT_SECONDARY= "#6b6b88"
@@ -208,17 +208,17 @@ class LandingPage(QWidget):
         """)
         logo_layout.addWidget(title)
 
-        sub = QLabel("discover beautiful wallpapers")
-        sub.setAlignment(Qt.AlignCenter)
-        sub.setStyleSheet(f"""
-            font-size: 13px;
-            font-weight: 400;
-            letter-spacing: 0.5px;
-            color: {self.COLOR_TEXT_MUTED};
-            background: transparent;
-            border: none;
-        """)
-        logo_layout.addWidget(sub)
+        # sub = QLabel("discover beautiful wallpapers")
+        # sub.setAlignment(Qt.AlignCenter)
+        # sub.setStyleSheet(f"""
+        #     font-size: 13px;
+        #     font-weight: 400;
+        #     letter-spacing: 0.5px;
+        #     color: {self.COLOR_TEXT_MUTED};
+        #     background: transparent;
+        #     border: none;
+        # """)
+        # logo_layout.addWidget(sub)
         cl.addWidget(logo_wrap)
 
         # ── Source selector ───────────────────────────────────────────────

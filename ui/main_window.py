@@ -564,7 +564,7 @@ class MainWindow(QMainWindow):
             msg = f"✓ Downloaded: {filename} → {self.settings.download_folder} ({timestamp})"
             self.status_bar.showMessage(msg)
         else:
-            self.status_bar.showMessage(f"✗ Download failed: {filename}")
+            self.status_bar.showMessage(f"X Download failed: {filename}")
 
     def closeEvent(self, event):
         """Cleanup on application close."""

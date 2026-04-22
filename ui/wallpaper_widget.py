@@ -30,8 +30,8 @@ COLOR_SUCCESS         = "#34d399"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HoverScaleEffect
-# LogicalCoordinates simples e robusto — sem manipulação de DPR manual.
-# Glow: borda sutil + halo radial difuso no topo. Sem conical neon.
+# Simple and robust LogicalCoordinates — without manual DPR manipulation.
+# Glow: subtle border + diffuse radial halo at the top. No conical neon.
 # ─────────────────────────────────────────────────────────────────────────────
 class HoverScaleEffect(QGraphicsEffect):
     def __init__(self, radius=14.0, no_glow=False, parent=None):
@@ -77,7 +77,7 @@ class HoverScaleEffect(QGraphicsEffect):
         painter.save()
         painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
 
-        # ── Glow suave na borda ───────────────────────────────────────────
+        # ── Soft glow on the border ───────────────────────────────────────────
         if self._glow_t > 0.005 and not self._no_glow:
             t    = self._glow_t
             card = QRectF(ox, oy, w, h)
@@ -87,7 +87,7 @@ class HoverScaleEffect(QGraphicsEffect):
             painter.setPen(QPen(QColor(77, 159, 255, int(70 * t)), pw))
             painter.drawRoundedRect(card.adjusted(pw/2, pw/2, -pw/2, -pw/2), r, r)
 
-            # Halo radial no topo — muito suave
+            # Radial halo at the top — very soft
             hr = w * 0.48
             halo = QRadialGradient(cx, oy, hr)
             halo.setColorAt(0.0, QColor(77, 159, 255, int(14 * t)))
@@ -96,7 +96,7 @@ class HoverScaleEffect(QGraphicsEffect):
             painter.setBrush(QBrush(halo))
             painter.drawEllipse(int(cx - hr), int(oy - hr), int(hr * 2), int(hr * 2))
 
-        # ── Zoom centrado ─────────────────────────────────────────────────
+        # ── Centered Zoom ─────────────────────────────────────────────────
         painter.translate(cx, cy)
         painter.scale(self._scale, self._scale)
         painter.translate(-cx, -cy)
@@ -324,7 +324,7 @@ class WallpaperWidget(QFrame):
 
         self.checkmark_btn = QToolButton()
         self.checkmark_btn.setText("✓")
-        self.checkmark_btn.setToolTip("Baixado")
+        self.checkmark_btn.setToolTip("Downloaded")
         self.checkmark_btn.setStyleSheet(f"""
             QToolButton {{
                 background-color: transparent;
@@ -368,7 +368,7 @@ class WallpaperWidget(QFrame):
 
         self.expand_btn = AnimatedToolButton()
         self.expand_btn.setText("⤢")
-        self.expand_btn.setToolTip("Expandir preview")
+        self.expand_btn.setToolTip("Expand preview")
         self.expand_btn.setCursor(Qt.PointingHandCursor)
         self.expand_btn.setStyleSheet(BTN_STYLE)
         self.expand_btn.setFixedSize(30, 22)
@@ -377,7 +377,7 @@ class WallpaperWidget(QFrame):
 
         self.wallpaper_btn = AnimatedToolButton()
         self.wallpaper_btn.setText("🖵")
-        self.wallpaper_btn.setToolTip("Definir como papel de parede")
+        self.wallpaper_btn.setToolTip("Set as wallpaper")
         self.wallpaper_btn.setCursor(Qt.PointingHandCursor)
         self.wallpaper_btn.setStyleSheet(BTN_STYLE)
         self.wallpaper_btn.setFixedSize(30, 22)
@@ -462,7 +462,7 @@ class WallpaperWidget(QFrame):
                 self._loaded = True
             else:
                 self.thumb_label.stop_shimmer()
-                self.thumb_label.setText("Inválido")
+                self.thumb_label.setText("Invalid preview")
             self.update_downloaded_status()
             self.update_active_status()
             return
@@ -479,7 +479,7 @@ class WallpaperWidget(QFrame):
             self._loaded = True
         else:
             self.thumb_label.stop_shimmer()
-            self.thumb_label.setText("Falha ao carregar")
+            self.thumb_label.setText("Failed to load preview")
         self.update_downloaded_status()
         self.update_active_status()
 
