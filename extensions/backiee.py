@@ -131,7 +131,7 @@ class BackieeExtension(WallpaperExtension):
                     "title": slug.replace('-', ' ').replace('/', ' ').title(),
                     "page_url": href,
                     "thumbnail_url": f"{self.base_url}/static/wallpapers/456x257/{img_id}.jpg",
-                    "resolution": "?",
+                    "resolution": "3840x2160",
                     "query": query,
                 })
             
@@ -154,22 +154,9 @@ class BackieeExtension(WallpaperExtension):
         return wallpaper_data.get("thumbnail_url", "")
     
     def get_download_url(self, wallpaper_data: Dict[str, Any], resolution: str = None) -> str:
-        img_id = wallpaper_data.get("img_id", wallpaper_data.get("id", ""))
-        return f"{self.base_url}/static/wallpapers/3840x2160/{img_id}.jpg"
+        urls = self.get_download_urls_by_priority(wallpaper_data)
+        return urls[0] if urls else ""
     
-    def get_download_url_for_set(self, wallpaper_data: Dict[str, Any]) -> str:
-        page_url = wallpaper_data.get("page_url", "")
-        wall_id = wallpaper_data.get("id", "")
-        
-        if page_url and wall_id:
-            try:
-                return self._get_download_url_from_page(page_url, wall_id)
-            except Exception:
-                pass
-        
-        img_id = wallpaper_data.get("img_id", wallpaper_data.get("id", ""))
-        return f"{self.base_url}/static/wallpapers/3840x2160/{img_id}.jpg"
-
     def get_download_urls_by_priority(self, wallpaper_data: Dict[str, Any]) -> List[str]:
         img_id = wallpaper_data.get("img_id", wallpaper_data.get("id", ""))
         return [
@@ -185,7 +172,7 @@ class BackieeExtension(WallpaperExtension):
     
     def get_resolution(self, wallpaper_data: Dict[str, Any]) -> str:
         return wallpaper_data.get("resolution", "?") or "?"
-
+    
     def get_available_resolutions(self, wallpaper_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         return []
     
@@ -197,3 +184,16 @@ class BackieeExtension(WallpaperExtension):
                 "options": [{"id": cat["id"], "label": cat["label"], "default": cat["id"] == "anime"} for cat in CATEGORIES]
             },
         }
+    
+    def get_download_url_for_set(self, wallpaper_data: Dict[str, Any]) -> str:
+        page_url = wallpaper_data.get("page_url", "")
+        wall_id = wallpaper_data.get("id", "")
+        
+        if page_url and wall_id:
+            try:
+                return self._get_download_url_from_page(page_url, wall_id)
+            except Exception:
+                pass
+        
+        img_id = wallpaper_data.get("img_id", wallpaper_data.get("id", ""))
+        return f"{self.base_url}/static/wallpapers/3840x2160/{img_id}.jpg"

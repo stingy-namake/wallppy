@@ -1316,6 +1316,8 @@ class ResultsPage(QWidget):
 
     def expand_wallpaper(self, wallpaper_data):
         image_url = self.extension.get_download_url(wallpaper_data)
+        if not image_url:
+            image_url = self.extension.get_thumbnail_url(wallpaper_data)
         if image_url:
             if os.path.exists(image_url):
                 image_url = f"file://{os.path.abspath(image_url)}"

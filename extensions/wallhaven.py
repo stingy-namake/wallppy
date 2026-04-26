@@ -130,7 +130,11 @@ class WallhavenExtension(WallpaperExtension):
         return wallpaper_data.get("thumbs", {}).get("large", "")
     
     def get_download_url(self, wallpaper_data: Dict[str, Any]) -> str:
-        return wallpaper_data.get("path", "")
+        path = wallpaper_data.get("path", "")
+        if path:
+            if not path.startswith("http"):
+                path = f"https://wallhaven.cc{path}"
+        return path
     
     def get_wallpaper_id(self, wallpaper_data: Dict[str, Any]) -> str:
         return str(wallpaper_data.get("id", ""))
