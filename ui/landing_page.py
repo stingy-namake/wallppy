@@ -524,8 +524,9 @@ class LandingPage(QWidget):
         dir_row.addWidget(self.browse_btn)
 
         cl.addLayout(dir_row)
+        layout.addStretch(1)
         layout.addWidget(container)
-        layout.addStretch()
+        layout.addStretch(1)
 
     # ============================================================
     # SECTION: Event Handlers
