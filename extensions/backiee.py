@@ -117,7 +117,9 @@ class BackieeExtension(WallpaperExtension):
             response.raise_for_status()
             page_html = response.text
         except Exception as e:
-            logger.error(f"Backiee requests failed, trying curl: {e}")
+            # Use curl as fallback - binary's bundled OpenSSL is too old for backiee's Cloudflare
+            # but system curl links to system SSL which works. Force LD to find system libs.
+            logger.warning(f"Backiee requests failed, falling back to curl: {e}")
             try:
                 curl_env = os.environ.copy()
                 # Prefer system SSL over bundled one
@@ -131,11 +133,6 @@ class BackieeExtension(WallpaperExtension):
                     env=curl_env
                 )
                 page_html = result.stdout
-                stderr = result.stderr
-                logger.error(f"Curl: stdout={len(page_html)}, stderr={len(stderr)} | {stderr}")
-                logger.error(f"Curl result length: {len(page_html)}, starts: {page_html[:200] if page_html else 'empty'}")
-                if not page_html or "cloudflare" in page_html.lower():
-                    logger.error(f"Curl returned cloudflare challenge: {page_html[:500] if page_html else 'empty'}")
             except Exception as e2:
                 logger.error(f"Backiee curl fallback also failed: {e2}")
                 return []
