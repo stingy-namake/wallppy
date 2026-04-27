@@ -76,9 +76,12 @@ class BackieeExtension(WallpaperExtension):
         self.session.mount("http://", adapter)
     
     def _get_download_url_from_page(self, page_url: str, wall_id: str) -> str:
-        from core.workers import get_session
-        session = get_session()
+        img_id = str(int(wall_id) + 100000)
+        
+        # Try requests first, fall back to curl for cloudflare-blocked binary
         try:
+            from core.workers import get_session
+            session = get_session()
             response = session.get(page_url, timeout=15)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
@@ -87,11 +90,29 @@ class BackieeExtension(WallpaperExtension):
                 file_url = download_btn.get('data-file-url', '')
                 if file_url:
                     return file_url
-            img_id = str(int(wall_id) + 100000)
             return f"{self.base_url}/static/wallpapers/3840x2160/{img_id}.jpg"
         except Exception as e:
-            logger.error(f"Backiee get_download_url_from_page failed: {e}")
-            img_id = str(int(wall_id) + 100000)
+            logger.warning(f"Backiee get_download_url_from_page requests failed, trying curl: {e}")
+            try:
+                curl_env = os.environ.copy()
+                curl_env["LD_LIBRARY_PATH"] = "/usr/lib:/lib"
+                result = subprocess.run(
+                    ["curl", "-sL", "--max-time", "15",
+                     "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                     "-H", "Referer: https://backiee.com/",
+                     page_url],
+                    capture_output=True, text=True,
+                    env=curl_env
+                )
+                soup = BeautifulSoup(result.stdout, "html.parser")
+                download_btn = soup.find('button', {'data-download-btn': True})
+                if download_btn:
+                    file_url = download_btn.get('data-file-url', '')
+                    if file_url:
+                        return file_url
+            except Exception as e2:
+                logger.error(f"Backiee curl fallback also failed: {e2}")
+            
             return f"{self.base_url}/static/wallpapers/3840x2160/{img_id}.jpg"
     
     def _build_url(self, query: str, page: int) -> str:

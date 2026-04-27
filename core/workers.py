@@ -29,6 +29,23 @@ def get_session():
     return _thread_local.session
 
 
+def curl_fetch(url: str, timeout: int = 15) -> bytes:
+    """Fallback fetch using system curl when requests fails (cloudflare blocked)."""
+    import subprocess
+    import os
+    curl_env = os.environ.copy()
+    curl_env["LD_LIBRARY_PATH"] = "/usr/lib:/lib"
+    result = subprocess.run(
+        ["curl", "-sL", "--max-time", str(timeout),
+         "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+         "-H", "Referer: https://backiee.com/",
+         url],
+        capture_output=True,
+        env=curl_env
+    )
+    return result.content
+
+
 class CrashAwareThread(QThread):
     """QThread that logs uncaught exceptions to the crash log before re-raising."""
 
@@ -105,8 +122,19 @@ class DownloadWorker(CrashAwareThread):
                         break
                 except Exception:
                     continue
-
+            
             if not response or response.status_code != 200:
+                # Fallback to curl if requests failed
+                try:
+                    data = curl_fetch(download_urls[0], timeout=30)
+                    if data:
+                        with open(filepath, 'wb') as f:
+                            f.write(data)
+                        self.progress.emit(100)
+                        self.finished.emit(True, filepath, filename, wall_id)
+                        return
+                except:
+                    pass
                 self.finished.emit(False, "", "404", wall_id)
                 return
 
@@ -166,11 +194,18 @@ class ThumbnailLoader(CrashAwareThread):
                 return
 
             with ThumbnailLoader._semaphore:
-                session = get_session()
-                response = session.get(self.url, timeout=10, stream=True)
-                if response.status_code == 200:
-                    data = response.content
-                    if len(data) > 500_000:
+                try:
+                    session = get_session()
+                    response = session.get(self.url, timeout=10, stream=True)
+                    if response.status_code == 200:
+                        data = response.content
+                    else:
+                        raise Exception(f"HTTP {response.status_code}")
+                except Exception as e:
+                    # Fallback to curl for cloudflare-blocked requests
+                    data = curl_fetch(self.url, timeout=10)
+                
+                if len(data) > 500_000:
                         img = QImage()
                         img.loadFromData(data)
                         if not img.isNull():
