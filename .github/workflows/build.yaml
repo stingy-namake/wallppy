@@ -1,4 +1,4 @@
-name: Build and Release Linux Binary
+name: Build and Release (Linux & Windows)
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   actions: read
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
@@ -127,6 +127,83 @@ jobs:
             dist/wallppy-linux-*
             dist/wallppy-*-linux.tar.gz
             dist/wallppy-installer.sh
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Determine version name
+        id: version
+        run: |
+          if (${{ github.ref_type }} -eq "tag") {
+            echo "TAG=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+          } else {
+            $BRANCH = "${{ github.ref_name }}"
+            $SAFE_BRANCH = $BRANCH -replace '/', '-'
+            $SHA_SHORT = git rev-parse --short HEAD
+            echo "TAG=${SAFE_BRANCH}-${SHA_SHORT}" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build binary with PyInstaller
+        run: |
+          $TAG = "${{ steps.version.outputs.TAG }}"
+          Write-Host "Building version: $TAG"
+          
+          Remove-Item -Recurse -Force dist/, build/, *.spec -ErrorAction SilentlyContinue
+          
+          pyinstaller `
+            --onefile `
+            --name "wallppy-windows-${TAG}" `
+            --add-data ".resources;resources" `
+            --icon ".resources/wallppy.ico" `
+            --noconfirm `
+            --noupx `
+            main.py
+          
+          Write-Host "Binary size:"
+          Get-Item dist/* | Select-Object Name, Length | Format-Table -AutoSize
+
+      - name: Prepare release assets
+        run: |
+          $TAG = "${{ steps.version.outputs.TAG }}"
+          
+          New-Item -ItemType Directory -Path "wallppy-${TAG}-windows" -Force | Out-Null
+          Copy-Item "dist/wallppy-windows-${TAG}.exe" "wallppy-${TAG}-windows/wallppy.exe"
+          Copy-Item -Recurse .resources "wallppy-${TAG}-windows/"
+          
+          Compress-Archive -Path "wallppy-${TAG}-windows/" -DestinationPath "dist/wallppy-${TAG}-windows.zip" -Force
+
+      - name: Upload artifacts (always available)
+        uses: actions/upload-artifact@v4
+        with:
+          name: wallppy-windows-${{ steps.version.outputs.TAG }}
+          path: |
+            dist/wallppy-windows-*
+            dist/wallppy-*-windows.zip
+          retention-days: 7
+
+      - name: Upload to GitHub Release (only on tag push)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/wallppy-windows-*
+            dist/wallppy-*-windows.zip
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
