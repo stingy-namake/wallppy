@@ -4,6 +4,9 @@ from urllib3.util.retry import Retry
 from typing import List, Dict, Any
 from bs4 import BeautifulSoup
 from core.extension import WallpaperExtension, register_extension
+import logging
+
+logger = logging.getLogger("wallppy.backiee")
 
 
 CATEGORIES = [
@@ -81,7 +84,8 @@ class BackieeExtension(WallpaperExtension):
                     return file_url
             img_id = str(int(wall_id) + 100000)
             return f"{self.base_url}/static/wallpapers/3840x2160/{img_id}.jpg"
-        except Exception:
+        except Exception as e:
+            logger.error(f"Backiee get_download_url_from_page failed: {e}")
             img_id = str(int(wall_id) + 100000)
             return f"{self.base_url}/static/wallpapers/3840x2160/{img_id}.jpg"
     
@@ -146,7 +150,8 @@ class BackieeExtension(WallpaperExtension):
                 wallpapers = wallpapers[:24]
             
             return wallpapers
-        except Exception:
+        except Exception as e:
+            logger.error(f"Backiee search failed for '{query}': {e}")
             return []
     
     def get_total_pages(self, query: str, **kwargs) -> int:
