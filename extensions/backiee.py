@@ -129,6 +129,8 @@ class BackieeExtension(WallpaperExtension):
                     env=curl_env
                 )
                 page_html = result.stdout
+                if not page_html or "cloudflare" in page_html.lower():
+                    logger.error(f"Curl returned cloudflare challenge: {page_html[:500] if page_html else 'empty'}")
             except Exception as e2:
                 logger.error(f"Backiee curl fallback also failed: {e2}")
                 return []
