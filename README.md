@@ -12,7 +12,7 @@
   
   <br/>
   
-<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/c3882353-fe99-4dec-822f-3b87834fbe1f" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/f5d4a4d6-9e31-4515-b616-24629d376f95" />
   
 </div>
 
@@ -29,9 +29,9 @@
 - 📥 **Batch downloads** - Queue multiple wallpapers for download
 - 🖥️ **One-click apply** - Set any wallpaper as your desktop background instantly
 
-<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/4af87fe1-3acd-4594-be9a-716cea37ed98" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/67e5ce94-ff23-49d8-b59f-4a64cc9fb1e9" />
 
-<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/fbe8cd83-e2ce-4354-b542-c8240e131c18" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/73b859b1-8bfd-490f-8867-dbb1a1b81e30" />
 
 ---
 
