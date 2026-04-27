@@ -60,8 +60,7 @@ Frozen: {getattr(sys, 'frozen', False)}
 
 # Use system certs in frozen mode to avoid stale bundled certs
 if getattr(sys, 'frozen', False):
-    import requests
-    system_certs = "/etc/ssl/certs/ca-certificates.crt"
+    system_certs = "/etc/ca-certificates/extracted/tls-ca-bundle.pem"
     if os.path.exists(system_certs):
         os.environ["REQUESTS_CA_BUNDLE"] = system_certs
         os.environ["SSL_CERT_FILE"] = system_certs
@@ -104,5 +103,4 @@ def main():
 
 
 if __name__ == "__main__":
-    debug_ssl()
     main()

@@ -111,7 +111,8 @@ class BackieeExtension(WallpaperExtension):
         url = self._build_url(query, page)
         
         try:
-            response = self.session.get(url, timeout=15)
+            response = self.session.get(url, timeout=15, verify=False)
+            logger.error(f"Backiee request: {response.status_code} {response.headers.get('Server', 'no server header')}")
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
             
